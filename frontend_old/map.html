@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Map — Smart Resource Allocation</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="/css/design-system.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <style>
+    #map { width:100%; height:calc(100vh - var(--header-height) - 80px); border-radius:var(--radius-lg); border:1px solid var(--glass-border); }
+    .map-controls { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+    .map-legend { padding:12px 16px; display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; }
+    .legend-item { display:flex; align-items:center; gap:6px; font-size:0.8rem; color:var(--text-secondary); }
+    .legend-dot { width:10px; height:10px; border-radius:50%; }
+    .map-sidebar { position:absolute; right:24px; top:calc(var(--header-height) + 100px); width:320px; z-index:1000; max-height:60vh; overflow-y:auto; }
+    .hotspot-item { padding:12px; margin-bottom:8px; border-radius:var(--radius-md); cursor:pointer; }
+    .hotspot-item:hover { background:var(--glass-bg-hover); }
+    .hotspot-title { font-weight:600; font-size:0.9rem; margin-bottom:4px; }
+    .hotspot-meta { font-size:0.8rem; color:var(--text-tertiary); }
+    @media (max-width:768px) { .map-sidebar { position:static; width:100%; margin-top:12px; max-height:300px; } }
+  </style>
+</head>
+<body>
+  <div class="creative-bg"><div class="glow-orb orb-1"></div><div class="glow-orb orb-2"></div></div>
+
+  <nav class="navbar">
+    <div class="flex" style="align-items:center;gap:16px;">
+      <button class="btn btn-ghost btn-icon" onclick="toggleSidebar()" style="display:none;" id="menu-btn">☰</button>
+      <a href="/" class="brand text-gradient">⚡ SmartAlloc</a>
+    </div>
+    <div class="nav-actions">
+      <button class="theme-toggle" onclick="toggleTheme()"></button>
+      <button class="btn btn-ghost btn-sm" onclick="api.logout()">Logout</button>
+    </div>
+  </nav>
+
+  <aside class="sidebar">
+    <ul class="sidebar-nav">
+      <li><a href="/dashboard.html"><span class="icon">📊</span> Dashboard</a></li>
+      <li><a href="/map.html" class="active"><span class="icon">🗺️</span> Live Map</a></li>
+      <li><a href="/cases.html"><span class="icon">📋</span> Cases</a></li>
+      <li><a href="/report.html"><span class="icon">📝</span> Submit Report</a></li>
+      <li><a href="/analytics.html"><span class="icon">📈</span> Analytics</a></li>
+    </ul>
+  </aside>
+
+  <main class="main-content">
+    <div class="page-header">
+      <div>
+        <h1>Live Map</h1>
+        <p class="subtitle">Geographic view of community needs, volunteers, and hotspots</p>
+      </div>
+    </div>
+
+    <div class="map-controls">
+      <button class="btn btn-sm btn-primary" onclick="showLayer('reports')" id="btn-reports">📍 Reports</button>
+      <button class="btn btn-sm btn-secondary" onclick="showLayer('volunteers')" id="btn-volunteers">👥 Volunteers</button>
+      <button class="btn btn-sm btn-secondary" onclick="showLayer('hotspots')" id="btn-hotspots">🔥 Hotspots</button>
+      <button class="btn btn-sm btn-secondary" onclick="showLayer('resources')" id="btn-resources">📦 Resources</button>
+    </div>
+
+    <div style="position:relative;">
+      <div id="map"></div>
+    </div>
+
+    <div class="glass-card map-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div> Critical</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> High</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3b82f6;"></div> Medium</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#22c55e;"></div> Low/Volunteer</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#a78bfa;"></div> Resource</div>
+    </div>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/js/theme.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    if (window.innerWidth <= 1024) document.getElementById('menu-btn').style.display = 'flex';
+
+    // Initialize map centered on Hyderabad
+    const map = L.map('map', { zoomControl: true }).setView([17.45, 78.48], 11);
+    
+    // Dark tile layer
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap © CARTO',
+      maxZoom: 19,
+    }).addTo(map);
+
+    let currentLayers = [];
+    const priorityColors = { critical: '#ef4444', high: '#f59e0b', medium: '#3b82f6', low: '#22c55e' };
+
+    function clearLayers() {
+      currentLayers.forEach(l => map.removeLayer(l));
+      currentLayers = [];
+    }
+
+    function setActiveBtn(id) {
+      document.querySelectorAll('.map-controls .btn').forEach(b => b.className = b.className.replace('btn-primary', 'btn-secondary'));
+      document.getElementById(id).className = document.getElementById(id).className.replace('btn-secondary', 'btn-primary');
+    }
+
+    async function showLayer(type) {
+      clearLayers();
+      
+      if (type === 'reports') {
+        setActiveBtn('btn-reports');
+        try {
+          const data = await api.getMapReports();
+          renderReports(data.data || []);
+        } catch { renderDemoReports(); }
+      } else if (type === 'volunteers') {
+        setActiveBtn('btn-volunteers');
+        try {
+          const data = await api.getMapVolunteers();
+          renderVolunteers(data.data || []);
+        } catch { renderDemoVolunteers(); }
+      } else if (type === 'hotspots') {
+        setActiveBtn('btn-hotspots');
+        try {
+          const data = await api.getHotspots(4);
+          renderHotspots(data.clusters || []);
+        } catch { renderDemoHotspots(); }
+      } else if (type === 'resources') {
+        setActiveBtn('btn-resources');
+        renderDemoResources();
+      }
+    }
+
+    function renderReports(reports) {
+      reports.forEach(r => {
+        if (!r.latitude || !r.longitude) return;
+        const color = priorityColors[r.priority_level] || '#3b82f6';
+        const marker = L.circleMarker([r.latitude, r.longitude], {
+          radius: 8, fillColor: color, color: color, weight: 2, opacity: 0.9, fillOpacity: 0.6,
+        }).addTo(map);
+        marker.bindPopup(`
+          <div style="min-width:200px;">
+            <strong>${r.title || 'Report'}</strong><br>
+            <span style="color:${color};font-weight:700;text-transform:uppercase;">${r.priority_level}</span><br>
+            Category: ${(r.category || '').replace(/_/g, ' ')}<br>
+            People affected: ${r.people_affected || 0}<br>
+            Urgency: ${Math.round(r.urgency_score || 0)}/100
+          </div>
+        `);
+        currentLayers.push(marker);
+      });
+    }
+
+    function renderVolunteers(vols) {
+      vols.forEach(v => {
+        if (!v.latitude || !v.longitude) return;
+        const color = v.availability === 'available' ? '#22c55e' : '#f59e0b';
+        const marker = L.circleMarker([v.latitude, v.longitude], {
+          radius: 7, fillColor: color, color: '#fff', weight: 2, opacity: 0.9, fillOpacity: 0.7,
+        }).addTo(map);
+        marker.bindPopup(`
+          <div><strong>${v.name || 'Volunteer'}</strong><br>
+          Skills: ${v.skills || 'N/A'}<br>
+          Status: ${v.availability}<br>
+          Reliability: ${v.reliability_score}%</div>
+        `);
+        currentLayers.push(marker);
+      });
+    }
+
+    function renderHotspots(clusters) {
+      const levelColors = { severe: '#ef4444', high: '#f59e0b', moderate: '#3b82f6', low: '#22c55e' };
+      clusters.forEach(c => {
+        const color = levelColors[c.hotspot_level] || '#f59e0b';
+        const circle = L.circle([c.centroid.latitude, c.centroid.longitude], {
+          radius: Math.max(c.radius_km || 1, 0.5) * 1000,
+          fillColor: color, color: color, weight: 2, opacity: 0.5, fillOpacity: 0.2,
+        }).addTo(map);
+        circle.bindPopup(`
+          <div><strong>Hotspot: ${c.hotspot_level?.toUpperCase()}</strong><br>
+          Reports: ${c.member_count}<br>
+          People affected: ${c.total_people_affected}<br>
+          Avg urgency: ${c.avg_urgency}/100<br>
+          Top concern: ${(c.top_category || '').replace(/_/g, ' ')}</div>
+        `);
+        currentLayers.push(circle);
+      });
+    }
+
+    // Demo data fallbacks
+    function renderDemoReports() {
+      const demo = [
+        { latitude: 17.4947, longitude: 78.3996, title: 'Food shortage – Ward 7', priority_level: 'critical', category: 'food_support', people_affected: 15, urgency_score: 84.5 },
+        { latitude: 17.4399, longitude: 78.4983, title: 'Medical camp needed', priority_level: 'critical', category: 'medical_emergency', people_affected: 30, urgency_score: 76.2 },
+        { latitude: 17.3457, longitude: 78.5522, title: 'School supplies needed', priority_level: 'medium', category: 'education_support', people_affected: 20, urgency_score: 48.3 },
+        { latitude: 17.6297, longitude: 78.4817, title: 'Flooding – displacement', priority_level: 'critical', category: 'disaster_relief', people_affected: 40, urgency_score: 92.7 },
+        { latitude: 17.3340, longitude: 78.5040, title: 'Women safety concern', priority_level: 'high', category: 'women_safety', people_affected: 50, urgency_score: 62.1 },
+        { latitude: 17.2473, longitude: 78.4263, title: 'Medicine delivery needed', priority_level: 'high', category: 'medical_support', people_affected: 5, urgency_score: 55.8 },
+      ];
+      renderReports(demo);
+    }
+
+    function renderDemoVolunteers() {
+      const demo = [
+        { latitude: 17.4950, longitude: 78.3990, name: 'Anita Devi', skills: 'food, logistics', availability: 'available', reliability_score: 78 },
+        { latitude: 17.4400, longitude: 78.4980, name: 'Dr. Suresh Reddy', skills: 'medical, health camp', availability: 'available', reliability_score: 92 },
+        { latitude: 17.3460, longitude: 78.5520, name: 'Kavitha Nair', skills: 'teaching, education', availability: 'available', reliability_score: 85 },
+        { latitude: 17.6300, longitude: 78.4820, name: 'Vijay Patel', skills: 'logistics, transport', availability: 'available', reliability_score: 71 },
+        { latitude: 17.3345, longitude: 78.5045, name: 'Meera Iyer', skills: 'emergency, first aid', availability: 'busy', reliability_score: 95 },
+      ];
+      renderVolunteers(demo);
+    }
+
+    function renderDemoHotspots() {
+      const demo = [
+        { centroid: { latitude: 17.48, longitude: 78.42 }, radius_km: 3, hotspot_level: 'severe', member_count: 2, total_people_affected: 55, avg_urgency: 80.3, top_category: 'food_support' },
+        { centroid: { latitude: 17.62, longitude: 78.48 }, radius_km: 2, hotspot_level: 'high', member_count: 1, total_people_affected: 40, avg_urgency: 92.7, top_category: 'disaster_relief' },
+        { centroid: { latitude: 17.34, longitude: 78.51 }, radius_km: 4, hotspot_level: 'moderate', member_count: 2, total_people_affected: 70, avg_urgency: 55.2, top_category: 'women_safety' },
+      ];
+      renderHotspots(demo);
+    }
+
+    function renderDemoResources() {
+      const demo = [
+        { latitude: 17.4850, longitude: 78.3950, name: 'Central Warehouse', type: 'food/hygiene', quantity: 230 },
+        { latitude: 17.4350, longitude: 78.5000, name: 'Health Center', type: 'medicine', quantity: 250 },
+        { latitude: 17.6200, longitude: 78.4750, name: 'Disaster Relief Store', type: 'shelter', quantity: 325 },
+        { latitude: 17.3500, longitude: 78.5500, name: 'NGO Office', type: 'education', quantity: 100 },
+      ];
+      demo.forEach(r => {
+        const marker = L.circleMarker([r.latitude, r.longitude], {
+          radius: 10, fillColor: '#a78bfa', color: '#7c3aed', weight: 2, fillOpacity: 0.6,
+        }).addTo(map);
+        marker.bindPopup(`<strong>${r.name}</strong><br>Type: ${r.type}<br>Stock: ${r.quantity} units`);
+        currentLayers.push(marker);
+      });
+    }
+
+    // Load default layer
+    showLayer('reports');
+  </script>
+</body>
+</html>

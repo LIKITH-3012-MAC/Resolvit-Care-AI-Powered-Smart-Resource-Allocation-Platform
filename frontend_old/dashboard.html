@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Smart Resource Allocation</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/design-system.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <style>
+    .stat-icon-critical { background:rgba(239,68,68,0.15); color:#f87171; }
+    .stat-icon-primary { background:rgba(139,92,246,0.15); color:#a78bfa; }
+    .stat-icon-success { background:rgba(34,197,94,0.15); color:#4ade80; }
+    .stat-icon-info { background:rgba(6,182,212,0.15); color:#22d3ee; }
+    .chart-container { position:relative; height:280px; padding:var(--space-lg); }
+    .chart-header { display:flex; align-items:center; justify-content:space-between; padding:var(--space-md) var(--space-lg) 0; }
+    .chart-header h3 { font-size:1rem; font-weight:700; }
+    .recent-list { padding:var(--space-md) var(--space-lg) var(--space-lg); max-height:380px; overflow-y:auto; }
+    .recent-item { display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-bottom:1px solid var(--border-subtle); }
+    .recent-item:last-child { border-bottom:none; }
+    .recent-item .dot { width:10px; height:10px; border-radius:50%; margin-top:6px; flex-shrink:0; }
+    .recent-item .info h4 { font-size:0.9rem; font-weight:600; margin-bottom:2px; }
+    .recent-item .info p { font-size:0.8rem; color:var(--text-tertiary); }
+    .recent-item .meta { margin-left:auto; text-align:right; flex-shrink:0; }
+    .vol-item { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border-subtle); }
+    .vol-item:last-child { border-bottom:none; }
+    .vol-avatar { width:36px; height:36px; border-radius:50%; background:var(--accent-gradient); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:0.85rem; color:white; flex-shrink:0; }
+    .vol-info h4 { font-size:0.85rem; font-weight:600; }
+    .vol-info p { font-size:0.75rem; color:var(--text-tertiary); }
+    .progress-bar-wrap { height:6px; background:rgba(255,255,255,0.08); border-radius:3px; overflow:hidden; }
+    .progress-bar-fill { height:100%; border-radius:3px; transition:width 1s ease; }
+    .quick-actions { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px,1fr)); gap:12px; }
+    .quick-action { padding:16px; text-align:center; cursor:pointer; }
+    .quick-action .qa-icon { font-size:1.8rem; margin-bottom:8px; }
+    .quick-action .qa-label { font-size:0.8rem; font-weight:600; color:var(--text-secondary); }
+  </style>
+</head>
+<body>
+  <div class="creative-bg"><div class="glow-orb orb-1"></div><div class="glow-orb orb-2"></div><div class="glow-orb orb-3"></div></div>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="flex" style="align-items:center;gap:16px;">
+      <button class="btn btn-ghost btn-icon" onclick="toggleSidebar()" style="display:none;" id="menu-btn">☰</button>
+      <a href="/" class="brand text-gradient">⚡ SmartAlloc</a>
+    </div>
+    <div class="nav-actions">
+      <button class="theme-toggle" onclick="toggleTheme()"></button>
+      <span class="text-sm text-secondary" id="user-name"></span>
+      <button class="btn btn-ghost btn-sm" onclick="api.logout()">Logout</button>
+    </div>
+  </nav>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <ul class="sidebar-nav">
+      <li><a href="/dashboard.html" class="active"><span class="icon">📊</span> Dashboard</a></li>
+      <li><a href="/map.html"><span class="icon">🗺️</span> Live Map</a></li>
+      <li><a href="/cases.html"><span class="icon">📋</span> Cases</a></li>
+      <li><a href="/report.html"><span class="icon">📝</span> Submit Report</a></li>
+      <li><a href="/analytics.html"><span class="icon">📈</span> Analytics</a></li>
+    </ul>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Page Header -->
+    <div class="page-header">
+      <div>
+        <h1>Dashboard</h1>
+        <p class="subtitle">Real-time overview of community coordination</p>
+      </div>
+      <a href="/report.html" class="btn btn-primary">+ New Report</a>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-4 mb-xl" id="stats-grid">
+      <div class="glass-card stat-card slide-up stagger-1">
+        <div class="stat-icon stat-icon-primary">📊</div>
+        <div class="stat-label">Total Reports</div>
+        <div class="stat-value" id="stat-reports">—</div>
+      </div>
+      <div class="glass-card stat-card slide-up stagger-2">
+        <div class="stat-icon stat-icon-critical">🔴</div>
+        <div class="stat-label">Critical Cases</div>
+        <div class="stat-value" id="stat-critical" style="color:#f87171;">—</div>
+      </div>
+      <div class="glass-card stat-card slide-up stagger-3">
+        <div class="stat-icon stat-icon-info">👥</div>
+        <div class="stat-label">Volunteers Active</div>
+        <div class="stat-value" id="stat-volunteers">—</div>
+      </div>
+      <div class="glass-card stat-card slide-up stagger-4">
+        <div class="stat-icon stat-icon-success">❤️</div>
+        <div class="stat-label">People Helped</div>
+        <div class="stat-value" id="stat-beneficiaries">—</div>
+      </div>
+    </div>
+
+    <!-- Second Row Stats -->
+    <div class="grid grid-3 mb-xl">
+      <div class="glass-card stat-card">
+        <div class="stat-label">Active Tasks</div>
+        <div class="stat-value" id="stat-active-tasks">—</div>
+      </div>
+      <div class="glass-card stat-card">
+        <div class="stat-label">Completion Rate</div>
+        <div class="stat-value text-gradient" id="stat-completion">—%</div>
+        <div class="progress-bar-wrap" style="margin-top:8px;">
+          <div class="progress-bar-fill progress-animated" id="completion-bar" style="background:var(--accent-gradient);width:0%"></div>
+        </div>
+      </div>
+      <div class="glass-card stat-card">
+        <div class="stat-label">Avg Response Time</div>
+        <div class="stat-value" id="stat-response">—h</div>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="mb-xl">
+      <h3 style="margin-bottom:12px;">Quick Actions</h3>
+      <div class="quick-actions">
+        <a href="/report.html" class="glass-card quick-action hover-lift">
+          <div class="qa-icon">📝</div>
+          <div class="qa-label">Submit Report</div>
+        </a>
+        <a href="/map.html" class="glass-card quick-action hover-lift">
+          <div class="qa-icon">🗺️</div>
+          <div class="qa-label">View Map</div>
+        </a>
+        <a href="/cases.html" class="glass-card quick-action hover-lift">
+          <div class="qa-icon">📋</div>
+          <div class="qa-label">Manage Cases</div>
+        </a>
+        <a href="/analytics.html" class="glass-card quick-action hover-lift">
+          <div class="qa-icon">📈</div>
+          <div class="qa-label">View Analytics</div>
+        </a>
+      </div>
+    </div>
+
+    <!-- Panels -->
+    <div class="grid grid-2">
+      <!-- Recent Reports -->
+      <div class="glass-card">
+        <div class="chart-header">
+          <h3>Recent Reports</h3>
+          <a href="/cases.html" class="btn btn-ghost btn-sm">View All →</a>
+        </div>
+        <div class="recent-list" id="recent-reports">
+          <div style="text-align:center;padding:2rem;"><div class="spinner" style="margin:0 auto;"></div></div>
+        </div>
+      </div>
+
+      <!-- Top Volunteers -->
+      <div class="glass-card">
+        <div class="chart-header">
+          <h3>Top Volunteers</h3>
+        </div>
+        <div class="recent-list" id="top-volunteers">
+          <div style="text-align:center;padding:2rem;"><div class="spinner" style="margin:0 auto;"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Priority Breakdown -->
+    <div class="grid grid-2 mb-xl" style="margin-top:24px;">
+      <div class="glass-card">
+        <div class="chart-header"><h3>Priority Distribution</h3></div>
+        <div class="recent-list" id="priority-breakdown"></div>
+      </div>
+      <div class="glass-card">
+        <div class="chart-header"><h3>Category Breakdown</h3></div>
+        <div class="recent-list" id="category-breakdown"></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/theme.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    // Load user info
+    const user = api.getUser();
+    if (user) document.getElementById('user-name').textContent = user.name || user.email;
+
+    // Mobile menu
+    if (window.innerWidth <= 1024) document.getElementById('menu-btn').style.display = 'flex';
+
+    // Load dashboard data
+    loadDashboard();
+
+    async function loadDashboard() {
+      try {
+        // Stats
+        const stats = await api.getDashboard();
+        document.getElementById('stat-reports').textContent = stats.total_reports;
+        document.getElementById('stat-critical').textContent = stats.critical_reports;
+        document.getElementById('stat-volunteers').textContent = `${stats.available_volunteers}/${stats.total_volunteers}`;
+        document.getElementById('stat-beneficiaries').textContent = stats.total_beneficiaries.toLocaleString();
+        document.getElementById('stat-active-tasks').textContent = stats.active_tasks;
+        document.getElementById('stat-completion').textContent = stats.completion_rate + '%';
+        document.getElementById('completion-bar').style.width = stats.completion_rate + '%';
+        document.getElementById('stat-response').textContent = stats.avg_response_hours + 'h';
+
+        // Recent reports
+        const reports = await api.getReports({ limit: 6, sort: 'created_at', order: 'desc' });
+        renderRecentReports(reports.data || []);
+
+        // Volunteers
+        const vols = await api.getVolunteerStats();
+        renderVolunteers(vols.data || []);
+
+        // Priority breakdown
+        const priorities = await api.getPriorities();
+        renderPriorities(priorities.data || []);
+
+        // Categories
+        const cats = await api.getCategories();
+        renderCategories(cats.data || []);
+      } catch (err) {
+        console.error('Dashboard load error:', err);
+        // Show demo data on error
+        showDemoData();
+      }
+    }
+
+    function showDemoData() {
+      document.getElementById('stat-reports').textContent = '6';
+      document.getElementById('stat-critical').textContent = '3';
+      document.getElementById('stat-volunteers').textContent = '5/6';
+      document.getElementById('stat-beneficiaries').textContent = '158';
+      document.getElementById('stat-active-tasks').textContent = '3';
+      document.getElementById('stat-completion').textContent = '33.3%';
+      document.getElementById('completion-bar').style.width = '33%';
+      document.getElementById('stat-response').textContent = '4.5h';
+
+      renderRecentReports([
+        { title: 'Urgent food shortage in Ward 7', priority_level: 'critical', category: 'food_support', created_at: new Date().toISOString(), people_affected: 15 },
+        { title: 'Medical camp needed in Old City', priority_level: 'critical', category: 'medical_emergency', created_at: new Date().toISOString(), people_affected: 30 },
+        { title: 'Flooding in Medchal — families displaced', priority_level: 'critical', category: 'disaster_relief', created_at: new Date().toISOString(), people_affected: 40 },
+        { title: 'Women safety concern at night', priority_level: 'high', category: 'women_safety', created_at: new Date().toISOString(), people_affected: 50 },
+        { title: 'School supplies needed for 20 children', priority_level: 'medium', category: 'education_support', created_at: new Date().toISOString(), people_affected: 20 },
+      ]);
+
+      renderVolunteers([
+        { name: 'Meera Iyer', reliability_score: 95, total_tasks_completed: 112, skills: 'emergency_response, first_aid', availability: 'busy' },
+        { name: 'Dr. Suresh Reddy', reliability_score: 92, total_tasks_completed: 87, skills: 'medical, health_camp', availability: 'available' },
+        { name: 'Kavitha Nair', reliability_score: 85, total_tasks_completed: 63, skills: 'teaching, education', availability: 'available' },
+        { name: 'Anita Devi', reliability_score: 78, total_tasks_completed: 42, skills: 'food_distribution, logistics', availability: 'available' },
+      ]);
+
+      renderPriorities([
+        { priority_level: 'critical', count: 3, avg_score: 84.5, total_people: 85 },
+        { priority_level: 'high', count: 2, avg_score: 59.0, total_people: 55 },
+        { priority_level: 'medium', count: 1, avg_score: 48.3, total_people: 20 },
+      ]);
+
+      renderCategories([
+        { category: 'food_support', count: 1, percentage: 16.7, avg_urgency: 84.5 },
+        { category: 'medical_emergency', count: 1, percentage: 16.7, avg_urgency: 76.2 },
+        { category: 'disaster_relief', count: 1, percentage: 16.7, avg_urgency: 92.7 },
+        { category: 'women_safety', count: 1, percentage: 16.7, avg_urgency: 62.1 },
+        { category: 'education_support', count: 1, percentage: 16.7, avg_urgency: 48.3 },
+        { category: 'medical_support', count: 1, percentage: 16.7, avg_urgency: 55.8 },
+      ]);
+    }
+
+    function renderRecentReports(reports) {
+      const el = document.getElementById('recent-reports');
+      if (!reports.length) { el.innerHTML = '<div class="empty-state"><p>No reports yet</p></div>'; return; }
+
+      const colors = { critical: '#ef4444', high: '#f59e0b', medium: '#3b82f6', low: '#22c55e' };
+      el.innerHTML = reports.map(r => `
+        <div class="recent-item">
+          <div class="dot" style="background:${colors[r.priority_level] || '#3b82f6'}"></div>
+          <div class="info">
+            <h4>${r.title}</h4>
+            <p>${(r.category || '').replace(/_/g, ' ')} · ${r.people_affected || 0} affected</p>
+          </div>
+          <div class="meta">
+            ${priorityBadge(r.priority_level)}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderVolunteers(vols) {
+      const el = document.getElementById('top-volunteers');
+      if (!vols.length) { el.innerHTML = '<div class="empty-state"><p>No volunteers</p></div>'; return; }
+
+      el.innerHTML = vols.slice(0, 5).map(v => `
+        <div class="vol-item">
+          <div class="vol-avatar">${(v.name || '?')[0]}</div>
+          <div class="vol-info">
+            <h4>${v.name}</h4>
+            <p>${v.total_tasks_completed} tasks · ${v.skills || ''}</p>
+          </div>
+          <div style="text-align:right;">
+            <span class="badge badge-${v.availability === 'available' ? 'low' : 'high'}">${v.availability}</span>
+            <div style="font-size:0.75rem;color:var(--text-tertiary);margin-top:4px;">${v.reliability_score}% reliable</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderPriorities(data) {
+      const el = document.getElementById('priority-breakdown');
+      const colors = { critical: '#ef4444', high: '#f59e0b', medium: '#3b82f6', low: '#22c55e' };
+      const total = data.reduce((s, d) => s + (d.count || 0), 0) || 1;
+
+      el.innerHTML = data.map(d => {
+        const pct = Math.round((d.count / total) * 100);
+        return `
+        <div style="margin-bottom:14px;">
+          <div class="flex-between" style="margin-bottom:4px;">
+            <span style="font-size:0.85rem;font-weight:600;text-transform:capitalize;">${d.priority_level}</span>
+            <span style="font-size:0.8rem;color:var(--text-tertiary);">${d.count} (${pct}%)</span>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill progress-animated" style="width:${pct}%;background:${colors[d.priority_level] || '#3b82f6'};"></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderCategories(data) {
+      const el = document.getElementById('category-breakdown');
+      const icons = { food_support:'🍲', medical_emergency:'🏥', disaster_relief:'🌊', women_safety:'👩', education_support:'📚', medical_support:'💊', child_welfare:'👶', sanitation:'🚿', shelter_need:'🏠', elderly_support:'👴' };
+
+      el.innerHTML = data.map(d => `
+        <div class="recent-item">
+          <span style="font-size:1.3rem;">${icons[d.category] || '📌'}</span>
+          <div class="info">
+            <h4>${(d.category || '').replace(/_/g, ' ')}</h4>
+            <p>Avg urgency: ${Math.round(d.avg_urgency || 0)}/100</p>
+          </div>
+          <div class="meta">
+            <span style="font-size:1rem;font-weight:700;">${d.count}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+  </script>
+</body>
+</html>

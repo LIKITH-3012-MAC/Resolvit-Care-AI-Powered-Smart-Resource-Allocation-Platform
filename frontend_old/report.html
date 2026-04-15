@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Submit Report — Smart Resource Allocation</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/design-system.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <style>
+    .report-form { max-width:700px; margin:0 auto; }
+    .form-card { padding:2rem; margin-bottom:1.5rem; }
+    .ai-results { padding:1.5rem; background:rgba(139,92,246,0.06); border:1px solid rgba(139,92,246,0.2); border-radius:var(--radius-md); display:none; }
+    .ai-results h4 { margin-bottom:8px; color:var(--text-accent); }
+    .result-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border-subtle); font-size:0.9rem; }
+    .result-row:last-child { border-bottom:none; }
+  </style>
+</head>
+<body>
+  <div class="creative-bg"><div class="glow-orb orb-1"></div><div class="glow-orb orb-2"></div></div>
+  <nav class="navbar">
+    <div class="flex" style="align-items:center;gap:16px;">
+      <a href="/" class="brand text-gradient">⚡ SmartAlloc</a>
+    </div>
+    <div class="nav-actions">
+      <button class="theme-toggle" onclick="toggleTheme()"></button>
+      <button class="btn btn-ghost btn-sm" onclick="api.logout()">Logout</button>
+    </div>
+  </nav>
+  <aside class="sidebar">
+    <ul class="sidebar-nav">
+      <li><a href="/dashboard.html"><span class="icon">📊</span> Dashboard</a></li>
+      <li><a href="/map.html"><span class="icon">🗺️</span> Live Map</a></li>
+      <li><a href="/cases.html"><span class="icon">📋</span> Cases</a></li>
+      <li><a href="/report.html" class="active"><span class="icon">📝</span> Submit Report</a></li>
+      <li><a href="/analytics.html"><span class="icon">📈</span> Analytics</a></li>
+    </ul>
+  </aside>
+  <main class="main-content">
+    <div class="page-header"><div><h1>Submit Report</h1><p class="subtitle">Report a community need — AI will classify and score urgency</p></div></div>
+    <div class="report-form">
+      <div class="glass-card form-card">
+        <h3 style="margin-bottom:16px;">📋 Report Details</h3>
+        <div class="form-group">
+          <label class="form-label">Title</label>
+          <input type="text" id="r-title" class="form-input" placeholder="Brief summary of the need">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description</label>
+          <textarea id="r-desc" class="form-textarea" rows="5" placeholder="Detailed description of the situation, who is affected, and what's needed"></textarea>
+        </div>
+        <div style="display:flex;gap:16px;">
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Severity (1-10)</label>
+            <input type="number" id="r-severity" class="form-input" min="1" max="10" value="5">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">People Affected</label>
+            <input type="number" id="r-people" class="form-input" min="1" value="1">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Vulnerable Group</label>
+          <select id="r-vulnerable" class="form-select">
+            <option value="">None / Not specified</option>
+            <option value="elderly">Elderly</option>
+            <option value="children">Children</option>
+            <option value="women">Women</option>
+            <option value="disabled">Disabled</option>
+            <option value="pregnant">Pregnant Women</option>
+            <option value="families">Families with Infants</option>
+          </select>
+        </div>
+      </div>
+      <div class="glass-card form-card">
+        <h3 style="margin-bottom:16px;">📍 Location</h3>
+        <div class="form-group">
+          <label class="form-label">Address / Area</label>
+          <input type="text" id="r-address" class="form-input" placeholder="e.g., Ward 7, Old City, Hyderabad">
+        </div>
+        <div style="display:flex;gap:16px;">
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Latitude</label>
+            <input type="number" id="r-lat" class="form-input" step="0.0001" placeholder="17.45">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Longitude</label>
+            <input type="number" id="r-lng" class="form-input" step="0.0001" placeholder="78.48">
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="getLocation()">📍 Use My Location</button>
+      </div>
+      <button class="btn btn-primary btn-full btn-lg" onclick="submitReport()" id="btn-submit">Submit Report →</button>
+      <div class="ai-results" id="ai-results" style="margin-top:16px;">
+        <h4>🤖 AI Analysis</h4>
+        <div id="ai-detail"></div>
+      </div>
+    </div>
+  </main>
+  <script src="/js/theme.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    function getLocation() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+          document.getElementById('r-lat').value = pos.coords.latitude.toFixed(4);
+          document.getElementById('r-lng').value = pos.coords.longitude.toFixed(4);
+          showToast('Location captured', 'success');
+        }, () => showToast('Location access denied', 'error'));
+      }
+    }
+    async function submitReport() {
+      const data = {
+        title: document.getElementById('r-title').value.trim(),
+        description: document.getElementById('r-desc').value.trim(),
+        severity: parseInt(document.getElementById('r-severity').value),
+        people_affected: parseInt(document.getElementById('r-people').value),
+        vulnerable_group: document.getElementById('r-vulnerable').value,
+        address_text: document.getElementById('r-address').value.trim(),
+        latitude: parseFloat(document.getElementById('r-lat').value) || null,
+        longitude: parseFloat(document.getElementById('r-lng').value) || null,
+        source_type: 'web_form',
+      };
+      if (!data.title || data.title.length < 5) return showToast('Title must be at least 5 characters', 'error');
+      if (!data.description || data.description.length < 10) return showToast('Please provide a detailed description', 'error');
+      const btn = document.getElementById('btn-submit');
+      btn.disabled = true; btn.textContent = 'Analyzing & Submitting...';
+      try {
+        const res = await api.createReport(data);
+        showToast('Report submitted!', 'success');
+        const el = document.getElementById('ai-results');
+        el.style.display = 'block';
+        const cls = res.ai_classification || {};
+        const pri = res.ai_priority || {};
+        document.getElementById('ai-detail').innerHTML = `
+          <div class="result-row"><span>Category</span><strong>${(cls.primary||'unknown').replace(/_/g,' ')}</strong></div>
+          <div class="result-row"><span>Confidence</span><strong>${Math.round((cls.confidence||0)*100)}%</strong></div>
+          <div class="result-row"><span>Priority</span>${priorityBadge(pri.level)}</div>
+          <div class="result-row"><span>Urgency Score</span><strong>${Math.round(pri.score||0)}/100</strong></div>
+          <div style="margin-top:12px;font-size:0.85rem;color:var(--text-secondary);">${pri.explanation||''}</div>
+        `;
+        btn.textContent = '✅ Submitted!';
+      } catch (err) {
+        showToast(err.message || 'Submission failed', 'error');
+        btn.disabled = false; btn.textContent = 'Submit Report →';
+      }
+    }
+  </script>
+</body>
+</html>

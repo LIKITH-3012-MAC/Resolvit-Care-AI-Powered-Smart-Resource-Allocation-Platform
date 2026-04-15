@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign Up — Smart Resource Allocation</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/design-system.css">
+  <link rel="stylesheet" href="/css/components.css">
+  <link rel="stylesheet" href="/css/animations.css">
+  <style>
+    .auth-page { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:2rem; }
+    .auth-card { width:100%; max-width:460px; padding:2.5rem; }
+    .auth-header { text-align:center; margin-bottom:2rem; }
+    .auth-header .logo { font-size:1.5rem; font-weight:900; margin-bottom:0.5rem; }
+    .auth-header h1 { font-size:1.6rem; font-weight:800; margin-bottom:0.3rem; }
+    .auth-header p { color:var(--text-secondary); font-size:0.9rem; }
+    .step { display:none; } .step.active { display:block; }
+    .auth-footer { text-align:center; margin-top:1.5rem; font-size:0.85rem; color:var(--text-tertiary); }
+    .auth-footer a { color:var(--accent-primary); font-weight:600; }
+    .timer-bar { margin:1rem 0; text-align:center; }
+    .resend-info { font-size:0.8rem; color:var(--text-tertiary); text-align:center; margin-top:0.5rem; }
+    .form-row { display:flex; gap:1rem; }
+    .form-row .form-group { flex:1; }
+    .password-wrapper { position:relative; }
+    .password-toggle { position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-tertiary); cursor:pointer; font-size:1.1rem; }
+  </style>
+</head>
+<body>
+  <div class="creative-bg"><div class="glow-orb orb-1"></div><div class="glow-orb orb-2"></div></div>
+
+  <div class="auth-page">
+    <div class="glass-card auth-card scale-in">
+      <div class="auth-header">
+        <div class="logo text-gradient">⚡ SmartAlloc</div>
+        <h1>Create Account</h1>
+        <p>Join the smart coordination platform</p>
+      </div>
+
+      <!-- Social Signup -->
+      <div class="social-login-section" style="margin-bottom:0">
+        <button class="btn-social btn-google" onclick="loginWithGoogle()" style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px 16px;border-radius:var(--radius-md,8px);font-size:0.95rem;font-weight:600;cursor:pointer;transition:all 0.2s ease;border:1px solid var(--border-subtle,rgba(255,255,255,0.1));background:rgba(255,255,255,0.05);color:var(--text-primary,#f1f5f9)">
+          <svg width="20" height="20" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+          Continue with Google
+        </button>
+      </div>
+
+      <div class="divider" style="display:flex;align-items:center;gap:12px;margin:1.5rem 0;color:var(--text-tertiary);font-size:0.8rem"><span style="flex:1;height:1px;background:var(--border-subtle)"></span>or sign up with email<span style="flex:1;height:1px;background:var(--border-subtle)"></span></div>
+
+      <!-- Step 1: Email + OTP -->
+      <div class="step active" id="step-email">
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" id="signup-email" class="form-input" placeholder="you@example.com" required>
+        </div>
+        <button class="btn btn-primary btn-full btn-lg" onclick="requestOtp()" id="btn-send-otp">
+          Generate OTP →
+        </button>
+      </div>
+
+      <!-- Step 2: Verify OTP -->
+      <div class="step" id="step-otp">
+        <p style="text-align:center;color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+          Enter the 6-digit code sent to <strong id="otp-email-display"></strong>
+        </p>
+        <div class="otp-inputs" id="otp-container">
+          <input type="text" maxlength="1" class="otp-input" data-idx="0">
+          <input type="text" maxlength="1" class="otp-input" data-idx="1">
+          <input type="text" maxlength="1" class="otp-input" data-idx="2">
+          <input type="text" maxlength="1" class="otp-input" data-idx="3">
+          <input type="text" maxlength="1" class="otp-input" data-idx="4">
+          <input type="text" maxlength="1" class="otp-input" data-idx="5">
+        </div>
+        <div class="timer-bar">
+          <span class="countdown" id="otp-timer">10:00</span>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="verifyOtp()" id="btn-verify-otp">Verify OTP</button>
+        <div class="resend-info">
+          <button class="btn btn-ghost btn-sm" onclick="resendOtp()" id="btn-resend">Resend OTP</button>
+          <span id="resend-count">5 resends remaining</span>
+        </div>
+      </div>
+
+      <!-- Step 3: Complete Profile -->
+      <div class="step" id="step-profile">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" id="signup-name" class="form-input" placeholder="Your full name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role</label>
+          <select id="signup-role" class="form-select">
+            <option value="volunteer">Volunteer</option>
+            <option value="reporter">Community Reporter</option>
+            <option value="coordinator">Field Coordinator</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <div class="password-wrapper">
+            <input type="password" id="signup-password" class="form-input" placeholder="At least 8 characters" oninput="checkStrength(this.value)">
+            <button type="button" class="password-toggle" onclick="togglePassword('signup-password')">👁</button>
+          </div>
+          <div class="password-strength" id="strength-meter">
+            <div class="strength-bar"></div><div class="strength-bar"></div>
+            <div class="strength-bar"></div><div class="strength-bar"></div>
+          </div>
+          <span class="form-hint" id="strength-text"></span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confirm Password</label>
+          <input type="password" id="signup-confirm" class="form-input" placeholder="Repeat password">
+        </div>
+        <button class="btn btn-primary btn-full btn-lg" onclick="completeSignup()">Create Account →</button>
+      </div>
+
+      <div class="auth-footer">
+        Already have an account? <a href="/login.html">Sign In</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/theme.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    let signupEmail = '';
+    let resendRemaining = 5;
+    let timerInterval = null;
+
+    // OTP Input auto-focus
+    document.querySelectorAll('.otp-input').forEach((input, i, arr) => {
+      input.addEventListener('input', (e) => {
+        if (e.target.value && i < arr.length - 1) arr[i + 1].focus();
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !e.target.value && i > 0) arr[i - 1].focus();
+      });
+    });
+
+    async function requestOtp() {
+      const email = document.getElementById('signup-email').value.trim();
+      if (!email) return showToast('Please enter your email', 'error');
+      
+      const btn = document.getElementById('btn-send-otp');
+      btn.disabled = true; btn.textContent = 'Sending...';
+      
+      try {
+        const res = await api.requestOtp(email);
+        if (res.error) { showToast(res.error, 'error'); btn.disabled = false; btn.textContent = 'Generate OTP →'; return; }
+        
+        signupEmail = email;
+        resendRemaining = res.resend_remaining || 5;
+        document.getElementById('otp-email-display').textContent = email;
+        document.getElementById('resend-count').textContent = `${resendRemaining} resends remaining`;
+        
+        showStep('step-otp');
+        startTimer(600); // 10 min
+        showToast('OTP sent to your email!', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+        btn.disabled = false; btn.textContent = 'Generate OTP →';
+      }
+    }
+
+    async function verifyOtp() {
+      const otp = Array.from(document.querySelectorAll('.otp-input')).map(i => i.value).join('');
+      if (otp.length !== 6) return showToast('Please enter complete OTP', 'error');
+      
+      const btn = document.getElementById('btn-verify-otp');
+      btn.disabled = true; btn.textContent = 'Verifying...';
+      
+      try {
+        const res = await api.verifyOtp(signupEmail, otp);
+        if (res.error) { showToast(res.error, 'error'); btn.disabled = false; btn.textContent = 'Verify OTP'; return; }
+        
+        clearInterval(timerInterval);
+        showStep('step-profile');
+        showToast('Email verified!', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+        btn.disabled = false; btn.textContent = 'Verify OTP';
+      }
+    }
+
+    async function resendOtp() {
+      if (resendRemaining <= 0) return showToast('Resend limit reached', 'error');
+      try {
+        const res = await api.requestOtp(signupEmail);
+        if (res.error) return showToast(res.error, 'error');
+        resendRemaining = res.resend_remaining || (resendRemaining - 1);
+        document.getElementById('resend-count').textContent = `${resendRemaining} resends remaining`;
+        startTimer(600);
+        showToast('OTP resent!', 'success');
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    async function completeSignup() {
+      const name = document.getElementById('signup-name').value.trim();
+      const password = document.getElementById('signup-password').value;
+      const confirm = document.getElementById('signup-confirm').value;
+      const role = document.getElementById('signup-role').value;
+      
+      if (!name) return showToast('Please enter your name', 'error');
+      if (password.length < 8) return showToast('Password must be at least 8 characters', 'error');
+      if (password !== confirm) return showToast('Passwords do not match', 'error');
+      
+      try {
+        const res = await api.register({ email: signupEmail, name, password, role });
+        if (res.error) return showToast(res.error, 'error');
+        showToast('Account created! Welcome!', 'success');
+        setTimeout(() => window.location.href = '/dashboard.html', 1000);
+      } catch (err) { showToast(err.message, 'error'); }
+    }
+
+    function showStep(id) {
+      document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    function startTimer(seconds) {
+      clearInterval(timerInterval);
+      const el = document.getElementById('otp-timer');
+      let remaining = seconds;
+      
+      function tick() {
+        const m = Math.floor(remaining / 60);
+        const s = remaining % 60;
+        el.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+        el.className = 'countdown' + (remaining < 60 ? ' warning' : '') + (remaining <= 0 ? ' expired' : '');
+        if (remaining <= 0) { clearInterval(timerInterval); el.textContent = 'Expired'; }
+        remaining--;
+      }
+      tick();
+      timerInterval = setInterval(tick, 1000);
+    }
+
+    function checkStrength(pw) {
+      const bars = document.querySelectorAll('.strength-bar');
+      const text = document.getElementById('strength-text');
+      let score = 0;
+      if (pw.length >= 8) score++;
+      if (/[A-Z]/.test(pw)) score++;
+      if (/[0-9]/.test(pw)) score++;
+      if (/[^A-Za-z0-9]/.test(pw)) score++;
+      
+      const levels = ['', 'weak', 'fair', 'good', 'strong'];
+      const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
+      
+      bars.forEach((bar, i) => {
+        bar.className = 'strength-bar' + (i < score ? ` active ${levels[score]}` : '');
+      });
+      text.textContent = labels[score] || '';
+    }
+
+    function togglePassword(id) {
+      const input = document.getElementById(id);
+      input.type = input.type === 'password' ? 'text' : 'password';
+    }
+  </script>
+</body>
+</html>
