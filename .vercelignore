@@ -1,6 +1,6 @@
 # frontend/
-# backend/
-# ai/
+backend/
+ai/
 database/
 alembic/
 scripts/
@@ -11,5 +11,5 @@ README.md
 Procfile
 render.yaml
 docker-compose.yml
-# requirements.txt
+requirements.txt
 alembic.ini
