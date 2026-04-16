@@ -5,7 +5,16 @@
 
 class NeuralAssistant {
   constructor() {
-    this.API_URL = window.API_BASE_URL || (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' ? '/api' : 'http://127.0.0.1:8000/api');
+    // 1. Resolve API_URL dynamically (prefer relative /api for unified Flask architecture)
+    this.API_URL = window.API_BASE_URL || '/api';
+    
+    // If running on local dev with a specific port mismatch, check hostname
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      if (typeof API_BASE_URL !== 'undefined') {
+        this.API_URL = API_BASE_URL;
+      }
+    }
+
     this.history = [];
     this.isOpen = false;
     this.isThinking = false;

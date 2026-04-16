@@ -5,6 +5,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 
 from backend.config import settings
+from backend import database
 from backend.database import init_db, close_db, ensure_schema
 
 from backend.routes.auth import auth_bp
@@ -19,8 +20,8 @@ from backend.routes.ai_chat import ai_chat_bp
 from backend.routes.ai_ingest import ai_ingest_bp
 
 app = Flask(__name__, 
-            template_folder='templates',
-            static_folder='static',
+            template_folder='frontend/templates',
+            static_folder='frontend/static',
             static_url_path='/static')
 
 CORS(app)
@@ -42,15 +43,15 @@ app.register_blueprint(ai_ingest_bp, url_prefix='/api/ai')
 @app.before_request
 async def startup():
     # Note: Flask 2.3+ supports async before_request
-    # However, for a persistent pool, we check if it exists
-    from backend import database
+    # Persistent pool initialization
     if database.pool is None:
+        print("🚀 Initializing database pool...")
         await init_db()
         await ensure_schema()
 
-@app.teardown_appcontext
-async def shutdown(exception=None):
-    await close_db()
+# Note: In a production environment with Gunicorn/Uvicorn, 
+# you might use specific signals for shutdown, 
+# but we'll remove the per-request teardown which was causing "Event loop is closed" errors.
 
 # --- Frontend Routes ---
 
