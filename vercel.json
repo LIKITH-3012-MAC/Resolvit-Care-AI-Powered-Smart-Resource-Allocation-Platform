@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "buildCommand": "echo 'Skipping build... serving static files'",
+  "installCommand": "echo 'No dependencies to install'",
+  "outputDirectory": ".",
+  "routes": [
+    { "src": "/", "dest": "/frontend/templates/index.html" },
+    { "src": "/login", "dest": "/frontend/templates/login.html" },
+    { "src": "/signup", "dest": "/frontend/templates/signup.html" },
+    { "src": "/dashboard", "dest": "/frontend/templates/dashboard.html" },
+    { "src": "/report", "dest": "/frontend/templates/report.html" },
+    { "src": "/map", "dest": "/frontend/templates/map.html" },
+    { "src": "/analytics", "dest": "/frontend/templates/analytics.html" },
+    { "src": "/callback", "dest": "/frontend/templates/callback.html" },
+    { "src": "/forgot-password", "dest": "/frontend/templates/forgot-password.html" },
+    { "src": "/reset-password", "dest": "/frontend/templates/reset-password.html" },
+    { "src": "/static/(.*)", "dest": "/frontend/static/$1" },
+    { "src": "/(.*)", "dest": "/frontend/templates/$1" }
+  ]
+}

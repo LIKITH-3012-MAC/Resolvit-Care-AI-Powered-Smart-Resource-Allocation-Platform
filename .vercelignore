@@ -1,0 +1,19 @@
+# Exclude backend and system files from Vercel deployment
+.env
+.venv
+venv
+__pycache__
+backend/
+ai/
+database/
+alembic/
+alembic.ini
+scripts/
+app.py
+main.py
+requirements.txt
+Procfile
+docker-compose.yml
+render.yaml
+README.md
+deploy-check.txt
