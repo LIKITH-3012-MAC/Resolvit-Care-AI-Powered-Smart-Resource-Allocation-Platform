@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from backend.routes.auth import get_current_user
+from backend.routes.auth import get_optional_user
 from backend.app.ai.groq_client import stream_chat_completion
 from backend.app.ai.vector_store import search_documents
 
@@ -72,12 +72,15 @@ Retrieved Platform Context:
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
 @router.post("/chat")
-async def chat_endpoint(req: ChatRequest, user=Depends(get_current_user)):
+async def chat_endpoint(req: ChatRequest, user=Depends(get_optional_user)):
     """
     Open chat endpoint taking message and optional history.
     Streams back LLM tokens.
     """
+    # If user is None (guest), default to 'citizen' role
+    user_role = user.get("role", "citizen") if user else "citizen"
+    
     return StreamingResponse(
-        generate_rag_response(req.message, req.history, user_role=user.get("role", "citizen")),
+        generate_rag_response(req.message, req.history, user_role=user_role),
         media_type="text/event-stream"
     )

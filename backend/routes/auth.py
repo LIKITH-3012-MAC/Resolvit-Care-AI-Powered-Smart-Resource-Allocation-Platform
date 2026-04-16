@@ -79,6 +79,45 @@ async def get_current_user(request: Request):
     raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
+async def get_optional_user(request: Request):
+    """Optional dependency to extract user from JWT.
+    Returns None if token is missing or invalid.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+
+    token = auth_header.split(" ", 1)[1]
+
+    # 1. Try local JWT
+    payload = verify_token(token)
+    if payload:
+        user_id = payload.get("sub")
+        user = await fetch_one("SELECT * FROM users WHERE id = $1", user_id)
+        if user:
+            return user
+
+    # 2. Try Auth0 JWT
+    if settings.AUTH0_DOMAIN:
+        try:
+            from backend.routes.auth0 import verify_auth0_token
+            auth0_payload = verify_auth0_token(token)
+            auth0_sub = auth0_payload.get("sub", "")
+            email = auth0_payload.get("email", "")
+
+            user = None
+            if auth0_sub:
+                user = await fetch_one("SELECT * FROM users WHERE auth0_sub = $1", auth0_sub)
+            if not user and email:
+                user = await fetch_one("SELECT * FROM users WHERE email = $1", email.lower())
+            if user:
+                return user
+        except Exception:
+            pass
+
+    return None
+
+
 # ──── Password helpers ────
 
 def hash_password(password: str) -> str:

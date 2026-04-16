@@ -22,7 +22,7 @@ export const UrgentQueue = () => {
     const fetchData = async () => {
       try {
         const response = await reportsApi.getAll({ limit: 5 });
-        setItems(response.data);
+        setItems(response.data.data);
       } catch (err) {
         console.error("Failed to fetch urgent queue", err);
       } finally {

@@ -66,7 +66,7 @@ async def health_check():
 
 
 # Serve frontend static files
-frontend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend_old")
+frontend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "public")
 if os.path.exists(frontend_dir):
     css_dir = os.path.join(frontend_dir, "css")
     js_dir = os.path.join(frontend_dir, "js")
