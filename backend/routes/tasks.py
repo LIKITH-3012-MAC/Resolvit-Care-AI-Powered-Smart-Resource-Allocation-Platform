@@ -1,23 +1,24 @@
 """
 Tasks API — Lifecycle management + assignment
-Flask Blueprint version.
+FastAPI Router version.
 """
 
 from uuid import UUID
-from flask import Blueprint, request, jsonify, abort
+from typing import Optional, List
+from fastapi import APIRouter, HTTPException, Query, Body, Request
 from backend.database import fetch_all, fetch_one, execute_returning, execute
 
-tasks_bp = Blueprint('tasks_bp', __name__)
+router = APIRouter()
 
-@tasks_bp.route("", methods=["GET"])
-async def list_tasks():
+@router.get("")
+async def list_tasks(
+    status: Optional[str] = Query(None),
+    priority: Optional[str] = Query(None),
+    volunteer_id: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1),
+    offset: int = Query(0, ge=0)
+):
     """List tasks with filtering."""
-    status = request.args.get("status")
-    priority = request.args.get("priority")
-    volunteer_id = request.args.get("volunteer_id")
-    limit = int(request.args.get("limit", 50))
-    offset = int(request.args.get("offset", 0))
-
     conditions = []
     params = []
     idx = 1
@@ -55,11 +56,11 @@ async def list_tasks():
         for key, val in row.items():
             if isinstance(val, UUID):
                 row[key] = str(val)
-    return jsonify({"data": rows, "total": len(rows)})
+    return {"data": rows, "total": len(rows)}
 
 
-@tasks_bp.route("/<task_id>", methods=["GET"])
-async def get_task(task_id):
+@router.get("/{task_id}")
+async def get_task(task_id: str):
     """Get task details."""
     row = await fetch_one(
         """SELECT t.*, cr.title as report_title, cr.description as report_description,
@@ -73,28 +74,28 @@ async def get_task(task_id):
         task_id
     )
     if not row:
-        return jsonify({"error": "Task not found"}), 404
+        raise HTTPException(status_code=404, detail="Task not found")
         
     for key, val in row.items():
         if isinstance(val, UUID):
             row[key] = str(val)
-    return jsonify(row)
+    return row
 
 
-@tasks_bp.route("", methods=["POST"])
-async def create_task():
+@router.post("")
+async def create_task(payload: dict = Body(...)):
     """Create a new task from a report."""
-    data = request.json
-    if not data or "report_id" not in data:
-        return jsonify({"error": "report_id required"}), 400
+    report_id = payload.get("report_id")
+    if not report_id:
+        raise HTTPException(status_code=400, detail="report_id required")
         
     report = await fetch_one(
         "SELECT urgency_score, priority_level FROM community_reports WHERE id = $1",
-        str(data["report_id"])
+        str(report_id)
     )
     
     priority_score = report["urgency_score"] if report else 0
-    priority_level = data.get("priority_level") or (report["priority_level"] if report else "medium")
+    priority_level = payload.get("priority_level") or (report["priority_level"] if report else "medium")
 
     row = await execute_returning(
         """INSERT INTO tasks
@@ -102,19 +103,19 @@ async def create_task():
             priority_score, deadline, resources_needed)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
            RETURNING *""",
-        str(data["report_id"]), data.get("task_type", "Resolution"), data.get("title", "New Task"),
-        data.get("description", ""), priority_level, priority_score,
-        data.get("deadline"), data.get("resources_needed", "[]")
+        str(report_id), payload.get("task_type", "Resolution"), payload.get("title", "New Task"),
+        payload.get("description", ""), priority_level, priority_score,
+        payload.get("deadline"), payload.get("resources_needed", "[]")
     )
-    return jsonify({"data": row, "message": "Task created"})
+    return {"data": row, "message": "Task created"}
 
 
-@tasks_bp.route("/<task_id>/assign/<volunteer_id>", methods=["POST"])
-async def assign_task(task_id, volunteer_id):
+@router.post("/{task_id}/assign/{volunteer_id}")
+async def assign_task(task_id: str, volunteer_id: str):
     """Assign a volunteer to a task."""
     vol = await fetch_one("SELECT * FROM volunteers WHERE id = $1", volunteer_id)
     if not vol:
-        return jsonify({"error": "Volunteer not found"}), 404
+        raise HTTPException(status_code=404, detail="Volunteer not found")
 
     row = await execute_returning(
         """UPDATE tasks
@@ -125,11 +126,11 @@ async def assign_task(task_id, volunteer_id):
     )
 
     if not row:
-        return jsonify({"error": "Task not found"}), 404
+        raise HTTPException(status_code=404, detail="Task not found")
 
     await execute(
         "UPDATE volunteers SET current_workload = current_workload + 1 WHERE id = $1",
         volunteer_id
     )
 
-    return jsonify({"data": row, "message": "Volunteer assigned to task"})
+    return {"data": row, "message": "Volunteer assigned to task"}

@@ -1,21 +1,22 @@
 """
 Maps API — Geospatial data for map visualization
-Flask Blueprint version.
+FastAPI Router version.
 """
 
 from uuid import UUID
-from flask import Blueprint, request, jsonify
+from typing import Optional
+from fastapi import APIRouter, Query
 from backend.database import fetch_all
 from ai.clustering import kmeans_cluster, dbscan_cluster, generate_heatmap_data
 
-maps_bp = Blueprint('maps_bp', __name__)
+router = APIRouter()
 
-@maps_bp.route("/reports", methods=["GET"])
-async def map_reports():
+@router.get("/reports")
+async def map_reports(
+    priority: Optional[str] = Query(None),
+    category: Optional[str] = Query(None)
+):
     """Get all reports with coordinates for map display."""
-    priority = request.args.get("priority")
-    category = request.args.get("category")
-
     conditions = ["cr.latitude IS NOT NULL", "cr.longitude IS NOT NULL"]
     params = []
     idx = 1
@@ -48,10 +49,10 @@ async def map_reports():
             if isinstance(val, UUID):
                 row[key] = str(val)
 
-    return jsonify({"data": rows, "total": len(rows)})
+    return {"data": rows, "total": len(rows)}
 
 
-@maps_bp.route("/volunteers", methods=["GET"])
+@router.get("/volunteers")
 async def map_volunteers():
     """Get volunteer locations for map display."""
     rows = await fetch_all("""
@@ -66,15 +67,15 @@ async def map_volunteers():
         for key, val in row.items():
             if isinstance(val, UUID):
                 row[key] = str(val)
-    return jsonify({"data": rows})
+    return {"data": rows}
 
 
-@maps_bp.route("/hotspots", methods=["GET"])
-async def detect_hotspots():
+@router.get("/hotspots")
+async def detect_hotspots(
+    k: int = Query(4, ge=1),
+    method: str = Query("kmeans")
+):
     """Detect need hotspots using clustering."""
-    k = int(request.args.get("k", 4))
-    method = request.args.get("method", "kmeans")
-    
     rows = await fetch_all("""
         SELECT id, title, category, severity, urgency_score,
                priority_level, people_affected, latitude, longitude
@@ -83,7 +84,7 @@ async def detect_hotspots():
     """)
 
     if not rows:
-        return jsonify({"clusters": [], "method": method})
+        return {"clusters": [], "method": method}
 
     points = [dict(r) for r in rows]
     # Handle UUIDs in points
@@ -94,13 +95,13 @@ async def detect_hotspots():
 
     if method == "dbscan":
         result = dbscan_cluster(points)
-        return jsonify({"clusters": result["clusters"], "method": "dbscan", "noise_count": result["noise_count"]})
+        return {"clusters": result["clusters"], "method": "dbscan", "noise_count": result["noise_count"]}
     else:
         clusters = kmeans_cluster(points, k=min(k, len(points)))
-        return jsonify({"clusters": clusters, "method": "kmeans"})
+        return {"clusters": clusters, "method": "kmeans"}
 
 
-@maps_bp.route("/heatmap", methods=["GET"])
+@router.get("/heatmap")
 async def heatmap_data():
     """Get heatmap-ready data for urgency visualization."""
     rows = await fetch_all("""
@@ -117,10 +118,10 @@ async def heatmap_data():
                 p[key] = str(val)
                 
     heatmap = generate_heatmap_data(points)
-    return jsonify({"data": heatmap, "total": len(heatmap)})
+    return {"data": heatmap, "total": len(heatmap)}
 
 
-@maps_bp.route("/resources", methods=["GET"])
+@router.get("/resources")
 async def map_resources():
     """Get resource warehouse locations for map display."""
     rows = await fetch_all("""
@@ -134,4 +135,4 @@ async def map_resources():
         for key, val in row.items():
             if isinstance(val, UUID):
                 row[key] = str(val)
-    return jsonify({"data": rows})
+    return {"data": rows}

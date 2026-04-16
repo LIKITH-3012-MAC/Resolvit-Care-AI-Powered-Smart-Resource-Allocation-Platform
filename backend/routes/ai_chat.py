@@ -1,26 +1,24 @@
 """
-AI Chat Endpoint — Flask Blueprint version.
+AI Chat Endpoint — FastAPI Router version.
 Provides a streaming /api/ai/chat route connecting the RAG pipeline.
 """
 
 import json
-import queue
-import threading
-import asyncio
-from flask import Blueprint, request, Response, jsonify, g
-from backend.auth_decorator import optional_token
-from backend.app.ai.groq_client import stream_chat_completion
-from backend.app.ai.vector_store import search_documents
+from typing import List, Dict
+from fastapi import APIRouter, HTTPException, Body, Request
+from fastapi.responses import StreamingResponse
+from backend.ai.groq_client import stream_chat_completion
+from backend.ai.vector_store import search_documents
 
-ai_chat_bp = Blueprint('ai_chat_bp', __name__)
+router = APIRouter()
 
-def generate_rag_response(query: str, history: list[dict], user_role: str):
+async def generate_rag_response(query: str, history: List[Dict], user_role: str):
     """
     RAG orchestrated logic: Process query, search vector db, build context, call LLM.
-    Uses a threaded bridge to support sync Flask (WSGI) streaming of async generators.
+    Native FastAPI async generator for streaming.
     """
     
-    # 1. Search Vector DB for context (Synchronous call to ChromaDB)
+    # 1. Search Vector DB for context
     try:
         search_results = search_documents(query, n_results=3)
         context_chunks = search_results.get("documents", [[]])[0]
@@ -46,61 +44,37 @@ Context:
         messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
     messages.append({"role": "user", "content": query})
 
-    # 3. Threaded Sync Bridge
-    q = queue.Queue()
-    
-    def worker():
-        # Create a fresh event loop for this thread to manage the async Groq stream
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        async def run_stream():
-            try:
-                print(f"🤖 Starting RAG stream for query: {query[:40]}...")
-                async for chunk in stream_chat_completion(messages):
-                    q.put(f"data: {json.dumps({'content': chunk})}\n\n")
-                q.put("data: [DONE]\n\n")
-                print("✅ Stream completed successfully")
-            except Exception as e:
-                print(f"❌ Stream failed: {e}")
-                q.put(f"data: {json.dumps({'error': str(e)})}\n\n")
-            finally:
-                q.put(None) # Sentinel to close the sync generator
-        
-        loop.run_until_complete(run_stream())
-        loop.close()
+    # 3. Stream from Groq
+    try:
+        print(f"🤖 Starting RAG stream for query: {query[:40]}...")
+        async for chunk in stream_chat_completion(messages):
+            yield f"data: {json.dumps({'content': chunk})}\n\n"
+        yield "data: [DONE]\n\n"
+        print("✅ Stream completed successfully")
+    except Exception as e:
+        print(f"❌ Stream failed: {e}")
+        yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
-    # Start the async collection thread
-    threading.Thread(target=worker, daemon=True).start()
-
-    # Consuming sync generator
-    while True:
-        item = q.get()
-        if item is None: break
-        yield item
-
-@ai_chat_bp.route("/chat", methods=["POST"])
-@optional_token
-async def chat_endpoint():
+@router.post("/chat")
+async def chat_endpoint(request: Request, payload: dict = Body(...)):
     """
     Unified AI Chat Endpoint.
     """
     try:
-        data = request.json
-        if not data or "message" not in data:
-            return jsonify({"error": "Message is required"}), 400
+        query = payload.get("message")
+        history = payload.get("history", [])
+        
+        if not query:
+            raise HTTPException(status_code=400, detail="Message is required")
             
-        query = data["message"]
-        history = data.get("history", [])
+        # User info from middleware (to be implemented in auth_decorator.py)
+        user = getattr(request.state, "user", None)
+        user_role = user.get("role", "citizen") if user else "citizen"
         
-        # g.current_user set by optional_token decorator
-        user_role = g.current_user.get("role", "citizen") if g.current_user else "citizen"
-        
-        # Return the sync-wrapped generator
-        return Response(
+        return StreamingResponse(
             generate_rag_response(query, history, user_role=user_role),
-            mimetype="text/event-stream"
+            media_type="text/event-stream"
         )
     except Exception as e:
         print(f"🔥 Chat endpoint crashed: {e}")
-        return jsonify({"error": "Internal server error", "detail": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))

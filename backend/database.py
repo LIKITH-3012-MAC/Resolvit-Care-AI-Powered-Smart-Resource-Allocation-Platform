@@ -8,21 +8,36 @@ import ssl
 import asyncpg
 from backend.config import settings
 
-pool = None  # Global pool is disabled because Flask runs each async request in a separate event loop
+class MockPool:
+    """Mock database pool for local development when Postgres is unavailable."""
+    class MockConn:
+        async def fetch(self, q, *a): return []
+        async def fetchrow(self, q, *a): return None
+        async def execute(self, q, *a): return "SUCCESS"
+        async def fetchval(self, q, *a): return None
+        async def close(self): pass
+    
+    async def acquire(self):
+        return self.MockConn()
+    async def release(self, conn):
+        pass
+    async def close(self):
+        pass
 
-def get_clean_db_url() -> str:
-    """Convert SQLAlchemy-style URL to asyncpg-compatible format."""
-    url = settings.DATABASE_URL
-    # Remove SQLAlchemy dialect prefixes
-    url = url.replace("postgresql+asyncpg://", "postgresql://")
-    url = url.replace("postgres://", "postgresql://")
-    return url
+pool = None
 
-# We'll use a helper to get a fresh connection for every query to avoid cross-loop issues
-async def _get_conn():
-    raw_url = get_clean_db_url()
-    needs_ssl = "ssl=require" in raw_url or "aivencloud" in raw_url or "neon" in raw_url or "supabase" in raw_url
-    clean_url = raw_url.split("?")[0] if "?" in raw_url else raw_url
+async def init_db():
+    """Initialize the global connection pool."""
+    global pool
+    if pool is not None:
+        return
+        
+    raw_url = settings.DATABASE_URL
+    # Convert SQLAlchemy dialect prefixes to asyncpg-compatible format
+    clean_url = raw_url.replace("postgresql+asyncpg://", "postgresql://").replace("postgres://", "postgresql://")
+    
+    needs_ssl = any(x in clean_url for x in ["ssl=require", "aivencloud", "neon", "supabase"])
+    clean_url = clean_url.split("?")[0] if "?" in clean_url else clean_url
     
     ssl_ctx = None
     if needs_ssl:
@@ -30,56 +45,71 @@ async def _get_conn():
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
         
-    return await asyncpg.connect(clean_url, ssl=ssl_ctx, command_timeout=30)
-
-
-async def init_db():
-    print("  ✅ Using per-request connection strategy (No global pool)")
+    try:
+        pool = await asyncpg.create_pool(
+            clean_url,
+            ssl=ssl_ctx,
+            min_size=5,
+            max_size=20,
+            command_timeout=30
+        )
+        print("  ✅ Database connection pool initialized")
+    except Exception as e:
+        if settings.DEBUG:
+            print(f"  ⚠️ Failed to connect to DB: {e}. Falling back to MockPool for development.")
+            pool = MockPool()
+        else:
+            print(f"  ❌ Failed to initialize database pool: {e}")
+            raise
 
 async def close_db():
-    pass
+    """Close the global connection pool."""
+    global pool
+    if pool:
+        await pool.close()
+        pool = None
+        print("  🔌 Database connection pool closed")
 
 async def get_db():
-    conn = await _get_conn()
-    try:
+    """Dependency for FastAPI to get a connection from the pool."""
+    if pool is None:
+        await init_db()
+    async with pool.acquire() as conn:
         yield conn
-    finally:
-        await conn.close()
 
 async def fetch_all(query: str, *args):
     """Execute query and return all rows as list of dicts."""
-    conn = await _get_conn()
-    try:
+    if pool is None: await init_db()
+    async with pool.acquire() as conn:
         rows = await conn.fetch(query, *args)
         return [dict(row) for row in rows]
-    finally:
-        await conn.close()
 
 async def fetch_one(query: str, *args):
     """Execute query and return single row as dict."""
-    conn = await _get_conn()
-    try:
+    if pool is None: await init_db()
+    async with pool.acquire() as conn:
         row = await conn.fetchrow(query, *args)
         return dict(row) if row else None
-    finally:
-        await conn.close()
 
 async def execute(query: str, *args):
     """Execute a statement (INSERT/UPDATE/DELETE)."""
-    conn = await _get_conn()
-    try:
+    if pool is None: await init_db()
+    async with pool.acquire() as conn:
         return await conn.execute(query, *args)
-    finally:
-        await conn.close()
 
 async def execute_returning(query: str, *args):
     """Execute a statement and return the result row."""
-    conn = await _get_conn()
-    try:
+    if pool is None: await init_db()
+    async with pool.acquire() as conn:
         row = await conn.fetchrow(query, *args)
         return dict(row) if row else None
-    finally:
-        await conn.close()
+
+
+async def _get_conn():
+    """Internal helper to get a raw connection from the pool."""
+    if pool is None:
+        await init_db()
+    return await pool.acquire()
 
 
 # ──── Schema Auto-Creation ────
@@ -315,46 +345,47 @@ ON CONFLICT (email) DO NOTHING;
 
 async def ensure_schema():
     """Create all tables if they don't exist, then seed admin user."""
-    conn = await _get_conn()
-    try:
+    if pool is None: await init_db()
+    async with pool.acquire() as conn:
         try:
-            await conn.execute(SCHEMA_SQL)
-            print("  ✅ Tables created/verified")
-        except Exception as e:
-            print(f"  ⚠️ Schema creation note: {e}")
-
-        # Migration: add auth0 columns if they don't exist (for pre-Auth0 tables)
-        migrations = [
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(20) DEFAULT 'database'",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth0_sub VARCHAR(255)",
-        ]
-        for sql in migrations:
             try:
-                await conn.execute(sql)
-            except Exception:
-                pass  # Column already exists or unsupported
+                await conn.execute(SCHEMA_SQL)
+                print("  ✅ Tables created/verified")
+            except Exception as e:
+                print(f"  ⚠️ Schema creation note: {e}")
 
-        try:
-            await conn.execute(INDEXES_SQL)
-            print("  ✅ Indexes created/verified")
-        except Exception as e:
-            print(f"  ⚠️ Index creation note: {e}")
+            # Migration: add auth0 columns if they don't exist
+            migrations = [
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider VARCHAR(20) DEFAULT 'database'",
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth0_sub VARCHAR(255)",
+            ]
+            for sql in migrations:
+                try:
+                    await conn.execute(sql)
+                except Exception:
+                    pass
 
-        try:
-            # Hash admin password properly if not already seeded
-            import bcrypt
-            admin = await conn.fetchrow("SELECT id FROM users WHERE email = 'admin@smartresource.org'")
-            if not admin:
-                pw_hash = bcrypt.hashpw("Admin@123456".encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-                await conn.execute(
-                    """INSERT INTO users (email, name, password_hash, role, email_verified, status)
-                       VALUES ($1, $2, $3, $4, TRUE, 'active')""",
-                    "admin@smartresource.org", "System Admin", pw_hash, "admin"
-                )
-                print("  ✅ Admin user seeded (admin@smartresource.org / Admin@123456)")
-            else:
-                print("  ✅ Admin user exists")
+            try:
+                await conn.execute(INDEXES_SQL)
+                print("  ✅ Indexes created/verified")
+            except Exception as e:
+                print(f"  ⚠️ Index creation note: {e}")
+
+            try:
+                import bcrypt
+                admin = await conn.fetchrow("SELECT id FROM users WHERE email = 'admin@smartresource.org'")
+                if not admin:
+                    pw_hash = bcrypt.hashpw("Admin@123456".encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+                    await conn.execute(
+                        """INSERT INTO users (email, name, password_hash, role, email_verified, status)
+                           VALUES ($1, $2, $3, $4, TRUE, 'active')""",
+                        "admin@smartresource.org", "System Admin", pw_hash, "admin"
+                    )
+                    print("  ✅ Admin user seeded (admin@smartresource.org / Admin@123456)")
+                else:
+                    print("  ✅ Admin user exists")
+            except Exception as e:
+                print(f"  ⚠️ Admin seed note: {e}")
         except Exception as e:
-            print(f"  ⚠️ Admin seed note: {e}")
-    finally:
-        await conn.close()
+            print(f"  ❌ Database schema/seed error: {e}")
+            raise

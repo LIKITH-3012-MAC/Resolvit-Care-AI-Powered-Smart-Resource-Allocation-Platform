@@ -1,19 +1,21 @@
 /**
  * Smart Resource Allocation — API Client
- * Unified API layer: Single Flask backend handles both auth + data.
+ * Unified FastAPI backend handles auth, data, and AI features.
  * 
- * DEPLOYMENT:
- *  - Frontend (UI): Served via Flask Templates (On Render)
- *  - Backend (Brain): Flask API + Auth (On Render)
- *  - Database: PostgreSQL
+ * ARCHITECTURE:
+ *  - Frontend: Vercel (Production) / FastAPI Static (Fallback/Local)
+ *  - Backend: FastAPI on Render
+ *  - Database: PostgreSQL (Neon/Aiven/Managed)
  */
 
-// ──── UNIFIED API CONFIG ────
-// Since the Flask backend now serves the UI via templates, we use relative paths.
-// Point to the remote Render backend when deployed on Vercel
-const BACKEND_DOMAIN = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+// ── ARCHITECTURE CONFIG ──
+// If the frontend is hosted on a different domain (e.g. Vercel), point to the Render backend.
+// Otherwise, use the current origin (e.g. for Render preview or local development).
+const BACKEND_DOMAIN = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://127.0.0.1:8000'
-  : 'https://resolvit-care-ai-powered-smart-resource.onrender.com';
+  : (window.location.hostname.includes('vercel.app') || window.location.hostname.includes('resolvit-ai.online'))
+    ? 'https://resolvit-care-ai-powered-smart-resource.onrender.com'
+    : window.location.origin;
 
 const API_BASE_URL = `${BACKEND_DOMAIN}/api`;
 const AUTH_BASE_URL = `${BACKEND_DOMAIN}/auth`;

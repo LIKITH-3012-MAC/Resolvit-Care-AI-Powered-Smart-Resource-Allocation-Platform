@@ -1,21 +1,22 @@
 """
 Resources API — Inventory management
-Flask Blueprint version.
+FastAPI Router version.
 """
 
 from uuid import UUID
-from flask import Blueprint, request, jsonify, abort
+from typing import Optional, List
+from fastapi import APIRouter, HTTPException, Query, Body, Request
 from backend.database import fetch_all, fetch_one, execute_returning, execute
 
-resources_bp = Blueprint('resources_bp', __name__)
+router = APIRouter()
 
-@resources_bp.route("", methods=["GET"])
-async def list_resources():
+@router.get("")
+async def list_resources(
+    res_type: Optional[str] = Query(None, alias="type"),
+    status: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1)
+):
     """List resource inventory."""
-    res_type = request.args.get("type")
-    status = request.args.get("status")
-    limit = int(request.args.get("limit", 50))
-
     conditions = []
     params = []
     idx = 1
@@ -44,15 +45,17 @@ async def list_resources():
         for key, val in row.items():
             if isinstance(val, UUID):
                 row[key] = str(val)
-    return jsonify({"data": rows, "total": len(rows)})
+    return {"data": rows, "total": len(rows)}
 
 
-@resources_bp.route("", methods=["POST"])
-async def create_resource():
+@router.post("")
+async def create_resource(payload: dict = Body(...)):
     """Add a resource to inventory."""
-    data = request.json
-    if not data or "name" not in data or "type" not in data:
-        return jsonify({"error": "name and type required"}), 400
+    name = payload.get("name")
+    res_type = payload.get("type")
+    
+    if not name or not res_type:
+        raise HTTPException(status_code=400, detail="name and type required")
         
     row = await execute_returning(
         """INSERT INTO resource_inventory
@@ -60,19 +63,18 @@ async def create_resource():
             warehouse_latitude, warehouse_longitude)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING *""",
-        data["name"], data["type"], data.get("quantity", 0),
-        data.get("unit", "units"), data.get("warehouse_location", ""),
-        data.get("warehouse_latitude"), data.get("warehouse_longitude")
+        name, res_type, payload.get("quantity", 0),
+        payload.get("unit", "units"), payload.get("warehouse_location", ""),
+        payload.get("warehouse_latitude"), payload.get("warehouse_longitude")
     )
-    return jsonify({"data": row, "message": "Resource added"})
+    return {"data": row, "message": "Resource added"}
 
 
-@resources_bp.route("/<resource_id>", methods=["PATCH"])
-async def update_resource(resource_id):
+@router.patch("/{resource_id}")
+async def update_resource(resource_id: str, payload: dict = Body(...)):
     """Update resource quantity or status."""
-    data = request.json
-    quantity = data.get("quantity")
-    status = data.get("status")
+    quantity = payload.get("quantity")
+    status = payload.get("status")
 
     fields = []
     params = []
@@ -88,19 +90,19 @@ async def update_resource(resource_id):
         idx += 1
 
     if not fields:
-        return jsonify({"error": "No fields to update"}), 400
+        raise HTTPException(status_code=400, detail="No fields to update")
 
     params.append(resource_id)
     query = f"UPDATE resource_inventory SET {', '.join(fields)} WHERE id = ${idx} RETURNING *"
     row = await execute_returning(query, *params)
     
     if not row:
-        return jsonify({"error": "Resource not found"}), 404
+         raise HTTPException(status_code=404, detail="Resource not found")
 
-    return jsonify({"data": row, "message": "Resource updated"})
+    return {"data": row, "message": "Resource updated"}
 
 
-@resources_bp.route("/summary", methods=["GET"])
+@router.get("/summary")
 async def resource_summary():
     """Get resource inventory summary by type."""
     rows = await fetch_all(
@@ -112,4 +114,4 @@ async def resource_summary():
             GROUP BY type
             ORDER BY type"""
     )
-    return jsonify({"data": rows})
+    return {"data": rows}

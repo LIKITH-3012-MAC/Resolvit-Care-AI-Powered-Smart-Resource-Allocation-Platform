@@ -1,23 +1,24 @@
 """
 Volunteers API — CRUD + matching
-Flask Blueprint version.
+FastAPI Router version.
 """
 
 from uuid import UUID
-from flask import Blueprint, request, jsonify, abort
+from typing import Optional, List
+from fastapi import APIRouter, HTTPException, Query, Body, Request
 from backend.database import fetch_all, fetch_one, execute_returning, execute
 from ai.matcher import find_best_matches
 
-volunteers_bp = Blueprint('volunteers_bp', __name__)
+router = APIRouter()
 
-@volunteers_bp.route("", methods=["GET"])
-async def list_volunteers():
+@router.get("")
+async def list_volunteers(
+    availability: Optional[str] = Query(None),
+    skill: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1),
+    offset: int = Query(0, ge=0)
+):
     """List volunteers with filtering."""
-    availability = request.args.get("availability")
-    skill = request.args.get("skill")
-    limit = int(request.args.get("limit", 50))
-    offset = int(request.args.get("offset", 0))
-
     conditions = []
     params = []
     idx = 1
@@ -51,11 +52,11 @@ async def list_volunteers():
             if isinstance(val, UUID):
                 row[key] = str(val)
                 
-    return jsonify({"data": rows, "total": len(rows)})
+    return {"data": rows, "total": len(rows)}
 
 
-@volunteers_bp.route("/<volunteer_id>", methods=["GET"])
-async def get_volunteer(volunteer_id):
+@router.get("/{volunteer_id}")
+async def get_volunteer(volunteer_id: str):
     """Get volunteer details."""
     row = await fetch_one(
         """SELECT v.*, u.name, u.email, u.phone
@@ -65,20 +66,20 @@ async def get_volunteer(volunteer_id):
         volunteer_id
     )
     if not row:
-        return jsonify({"error": "Volunteer not found"}), 404
+         raise HTTPException(status_code=404, detail="Volunteer not found")
         
     for key, val in row.items():
         if isinstance(val, UUID):
             row[key] = str(val)
-    return jsonify(row)
+    return row
 
 
-@volunteers_bp.route("", methods=["POST"])
-async def create_volunteer():
+@router.post("")
+async def create_volunteer(payload: dict = Body(...)):
     """Register a new volunteer."""
-    data = request.json
-    if not data or "user_id" not in data:
-        return jsonify({"error": "user_id required"}), 400
+    user_id = payload.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id required")
         
     row = await execute_returning(
         """INSERT INTO volunteers
@@ -86,23 +87,19 @@ async def create_volunteer():
             travel_radius_km, transport_access, gender, preferred_causes)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING *""",
-        str(data["user_id"]), data.get("skill_tags", []), data.get("languages", []),
-        data.get("latitude"), data.get("longitude"), data.get("travel_radius_km", 10),
-        data.get("transport_access", "none"), data.get("gender"), data.get("preferred_causes", [])
+        str(user_id), payload.get("skill_tags", []), payload.get("languages", []),
+        payload.get("latitude"), payload.get("longitude"), payload.get("travel_radius_km", 10),
+        payload.get("transport_access", "none"), payload.get("gender"), payload.get("preferred_causes", [])
     )
-    return jsonify({"data": row, "message": "Volunteer registered"})
+    return {"data": row, "message": "Volunteer registered"}
 
 
-@volunteers_bp.route("/match", methods=["POST"])
-async def match_volunteers():
+@router.post("/match")
+async def match_volunteers(payload: dict = Body(...)):
     """Find best volunteer matches for a task using AI matching engine."""
-    data = request.json
-    if not data:
-        return jsonify({"error": "Data required"}), 400
-        
-    task_type = data.get("task_type")
-    latitude = data.get("latitude")
-    longitude = data.get("longitude")
+    task_type = payload.get("task_type")
+    latitude = payload.get("latitude")
+    longitude = payload.get("longitude")
     
     volunteers = await fetch_all(
         """SELECT v.*, u.name
@@ -115,7 +112,7 @@ async def match_volunteers():
         "task_type": task_type,
         "latitude": latitude,
         "longitude": longitude,
-        "required_language": data.get("required_language", ""),
+        "required_language": payload.get("required_language", ""),
     }
 
     vol_dicts = []
@@ -135,5 +132,5 @@ async def match_volunteers():
             "total_tasks_completed": v.get("total_tasks_completed", 0),
         })
 
-    matches = find_best_matches(vol_dicts, task_info, top_n=data.get("top_n", 5))
-    return jsonify({"matches": matches, "task": task_info})
+    matches = find_best_matches(vol_dicts, task_info, top_n=payload.get("top_n", 5))
+    return {"matches": matches, "task": task_info}

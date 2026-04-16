@@ -1,14 +1,15 @@
 """
 Analytics API — Dashboard KPIs, trends, category stats
-Flask Blueprint version.
+FastAPI Router version.
 """
 
-from flask import Blueprint, request, jsonify
+from typing import Optional
+from fastapi import APIRouter, Request, Query
 from backend.database import fetch_all, fetch_one
 
-analytics_bp = Blueprint('analytics_bp', __name__)
+router = APIRouter()
 
-@analytics_bp.route("/dashboard", methods=["GET"])
+@router.get("/dashboard")
 async def dashboard_stats():
     """Get main dashboard statistics."""
     stats = await fetch_one("""
@@ -28,7 +29,7 @@ async def dashboard_stats():
     total_tasks = stats["total_tasks"] or 1
     completion_rate = round((stats["completed_tasks"] / total_tasks) * 100, 1)
 
-    return jsonify({
+    return {
         "total_reports": stats["total_reports"],
         "critical_reports": stats["critical_reports"],
         "high_reports": stats["high_reports"],
@@ -39,10 +40,10 @@ async def dashboard_stats():
         "total_beneficiaries": stats["total_beneficiaries"],
         "avg_response_hours": round(float(stats["avg_response_hours"]), 1),
         "completion_rate": completion_rate,
-    })
+    }
 
 
-@analytics_bp.route("/categories", methods=["GET"])
+@router.get("/categories")
 async def category_breakdown():
     """Get reports breakdown by category."""
     rows = await fetch_all("""
@@ -55,10 +56,10 @@ async def category_breakdown():
         GROUP BY category
         ORDER BY count DESC
     """)
-    return jsonify({"data": rows})
+    return {"data": rows}
 
 
-@analytics_bp.route("/priorities", methods=["GET"])
+@router.get("/priorities")
 async def priority_breakdown():
     """Get reports breakdown by priority level."""
     rows = await fetch_all("""
@@ -74,14 +75,12 @@ async def priority_breakdown():
             WHEN 'low' THEN 4
         END
     """)
-    return jsonify({"data": rows})
+    return {"data": rows}
 
 
-@analytics_bp.route("/timeline", methods=["GET"])
-async def timeline_stats():
+@router.get("/timeline")
+async def timeline_stats(days: int = Query(30, ge=1)):
     """Get daily report/task activity timeline."""
-    days = int(request.args.get("days", 30))
-    # Flask query params via request.args
     rows = await fetch_all(f"""
         SELECT
             d.date::text as date,
@@ -110,10 +109,10 @@ async def timeline_stats():
         ) i ON d.date = i.dt
         ORDER BY d.date
     """)
-    return jsonify({"data": rows})
+    return {"data": rows}
 
 
-@analytics_bp.route("/volunteers/stats", methods=["GET"])
+@router.get("/volunteers/stats")
 async def volunteer_stats():
     """Get volunteer performance statistics."""
     rows = await fetch_all("""
@@ -132,10 +131,10 @@ async def volunteer_stats():
                  v.current_workload, v.availability, v.skill_tags
         ORDER BY v.reliability_score DESC
     """)
-    return jsonify({"data": rows})
+    return {"data": rows}
 
 
-@analytics_bp.route("/impact", methods=["GET"])
+@router.get("/impact")
 async def impact_summary():
     """Get overall impact metrics."""
     stats = await fetch_one("""
@@ -148,11 +147,11 @@ async def impact_summary():
             AVG(satisfaction_score) as avg_satisfaction
         FROM impact_records
     """)
-    return jsonify({
+    return {
         "total_actions": stats["total_actions"],
         "total_beneficiaries": int(stats["total_beneficiaries"] or 0),
         "avg_resolve_time_hours": round(float(stats["avg_resolve_time"] or 0), 1),
         "total_resource_cost": float(stats["total_resource_cost"] or 0),
         "pending_followups": stats["pending_followups"],
         "avg_satisfaction": round(float(stats["avg_satisfaction"] or 0), 1) if stats["avg_satisfaction"] else None,
-    })
+    }

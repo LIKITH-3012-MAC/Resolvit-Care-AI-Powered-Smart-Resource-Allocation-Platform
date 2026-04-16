@@ -39,6 +39,8 @@ app = FastAPI(
 origins = [o.strip().strip('"').strip("'") for o in settings.CORS_ORIGINS.replace("[", "").replace("]", "").split(",")]
 origins = [o for o in origins if o]  # Remove empty strings
 
+from backend.auth_decorator import auth_middleware
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins + ["*"],  # Allow all during development
@@ -46,6 +48,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_auth_middleware(request: Request, call_next):
+    return await auth_middleware(request, call_next)
 
 # API routes
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
@@ -66,15 +72,20 @@ async def health_check():
 
 
 # Serve frontend static files
-frontend_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "public")
+root_dir = os.path.dirname(os.path.dirname(__file__))
+frontend_dir = os.path.join(root_dir, "frontend")
+
 if os.path.exists(frontend_dir):
-    css_dir = os.path.join(frontend_dir, "css")
-    js_dir = os.path.join(frontend_dir, "js")
+    static_dir = os.path.join(frontend_dir, "static")
     assets_dir = os.path.join(frontend_dir, "assets")
-    if os.path.exists(css_dir):
-        app.mount("/css", StaticFiles(directory=css_dir), name="css")
-    if os.path.exists(js_dir):
-        app.mount("/js", StaticFiles(directory=js_dir), name="js")
+    
+    if os.path.exists(static_dir):
+        # Mount subdirectories of static correctly
+        for item in os.listdir(static_dir):
+            item_path = os.path.join(static_dir, item)
+            if os.path.isdir(item_path):
+                app.mount(f"/{item}", StaticFiles(directory=item_path), name=item)
+    
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
@@ -82,7 +93,8 @@ if os.path.exists(frontend_dir):
 # Catch-all route for HTML pages
 @app.get("/{page}.html")
 async def serve_page(page: str):
-    filepath = os.path.join(frontend_dir, f"{page}.html")
+    templates_dir = os.path.join(frontend_dir, "templates")
+    filepath = os.path.join(templates_dir, f"{page}.html")
     if os.path.exists(filepath):
         return FileResponse(filepath)
     raise HTTPException(status_code=404, detail="Page not found")
@@ -90,7 +102,8 @@ async def serve_page(page: str):
 
 @app.get("/")
 async def serve_index():
-    filepath = os.path.join(frontend_dir, "index.html")
+    templates_dir = os.path.join(frontend_dir, "templates")
+    filepath = os.path.join(templates_dir, "index.html")
     if os.path.exists(filepath):
         return FileResponse(filepath)
     return {"message": "Smart Resource Allocation API", "docs": "/docs"}

@@ -1,5 +1,5 @@
 """
-Auth0 Social Login — Flask Blueprint version.
+Auth0 Social Login — FastAPI Router version.
 Verify Auth0 JWT, sync user to PostgreSQL, return local JWT.
 """
 
@@ -7,12 +7,12 @@ import json
 import urllib.request
 from datetime import datetime, timezone
 import jwt as pyjwt
-from flask import Blueprint, request, jsonify, abort
+from fastapi import APIRouter, HTTPException, Body, Request
 from backend.config import settings
 from backend.database import fetch_one, execute, execute_returning
 from backend.routes.auth import create_access_token
 
-auth0_bp = Blueprint('auth0_bp', __name__)
+router = APIRouter()
 
 # ──── Auth0 JWKS cache ────
 _jwks_cache = {"keys": [], "fetched_at": None}
@@ -24,7 +24,7 @@ def _fetch_jwks():
         return _jwks_cache["keys"]
 
     if not settings.AUTH0_DOMAIN:
-        abort(500, description="AUTH0_DOMAIN not configured")
+        raise HTTPException(status_code=500, detail="AUTH0_DOMAIN not configured")
 
     jwks_url = f"https://{settings.AUTH0_DOMAIN}/.well-known/jwks.json"
     try:
@@ -36,14 +36,14 @@ def _fetch_jwks():
             return _jwks_cache["keys"]
     except Exception as e:
         print(f"⚠️ Failed to fetch Auth0 JWKS: {e}")
-        return _jwks_cache["keys"] or abort(500, description="Failed to fetch Auth0 public keys")
+        return _jwks_cache["keys"] or HTTPException(status_code=500, detail="Failed to fetch Auth0 public keys")
 
 def verify_auth0_token(token: str) -> dict:
     jwks_keys = _fetch_jwks()
     try:
         unverified_header = pyjwt.get_unverified_header(token)
     except pyjwt.exceptions.DecodeError:
-        abort(401, description="Invalid token format")
+        raise HTTPException(status_code=401, detail="Invalid token format")
 
     kid = unverified_header.get("kid")
     rsa_key = next((key for key in jwks_keys if key.get("kid") == kid), None)
@@ -54,7 +54,7 @@ def verify_auth0_token(token: str) -> dict:
         rsa_key = next((key for key in jwks_keys if key.get("kid") == kid), None)
 
     if not rsa_key:
-        abort(401, description="Unable to find matching Auth0 signing key")
+        raise HTTPException(status_code=401, detail="Unable to find matching Auth0 signing key")
 
     try:
         from jwt.algorithms import RSAAlgorithm
@@ -67,19 +67,19 @@ def verify_auth0_token(token: str) -> dict:
         )
         return payload
     except Exception as e:
-        abort(401, description=f"Auth0 token verification failed: {e}")
+        raise HTTPException(status_code=401, detail=f"Auth0 token verification failed: {e}")
 
-@auth0_bp.route("/auth0-callback", methods=["POST"])
-async def auth0_callback():
-    data = request.json
-    if not data or "token" not in data:
-        return jsonify({"error": "Auth0 token required"}), 400
+@router.post("/auth0-callback")
+async def auth0_callback(payload: dict = Body(...)):
+    token = payload.get("token")
+    if not token:
+        raise HTTPException(status_code=400, detail="Auth0 token required")
         
-    payload = verify_auth0_token(data["token"])
-    auth0_sub = payload.get("sub", "")
-    email = payload.get("email") or payload.get(f"https://{settings.AUTH0_DOMAIN}/email") or ""
-    name = payload.get("name") or payload.get("nickname") or (email.split("@")[0] if email else "User")
-    picture = payload.get("picture", "")
+    data = verify_auth0_token(token)
+    auth0_sub = data.get("sub", "")
+    email = data.get("email") or data.get(f"https://{settings.AUTH0_DOMAIN}/email") or ""
+    name = data.get("name") or data.get("nickname") or (email.split("@")[0] if email else "User")
+    picture = data.get("picture", "")
 
     user = await fetch_one("SELECT * FROM users WHERE auth0_sub = $1", auth0_sub)
     if not user and email:
@@ -101,8 +101,8 @@ async def auth0_callback():
         user_id, role, user_email = str(new_user["id"]), new_user["role"], new_user["email"]
 
     token = create_access_token({"sub": user_id, "email": user_email, "role": role})
-    return jsonify({
+    return {
         "accessToken": token,
         "user": {"id": user_id, "email": user_email, "name": name, "role": role, "picture": picture},
         "message": "Auth0 login successful"
-    })
+    }
