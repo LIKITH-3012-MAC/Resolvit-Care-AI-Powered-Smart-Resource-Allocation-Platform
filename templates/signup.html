@@ -82,7 +82,7 @@
       </div>
 
       <div class="auth-footer">
-        Already have an account? <a href="/login.html">Sign In</a>
+        Already have an account? <a href="/login">Sign In</a>
       </div>
     </div>
   </div>
@@ -106,7 +106,7 @@
         const res = await api.register({ email: email, name, password, role });
         if (res.error) return showToast(res.error, 'error');
         showToast('Account created! Welcome!', 'success');
-        setTimeout(() => window.location.href = '/dashboard.html', 1000);
+        setTimeout(() => window.location.href = '/dashboard', 1000);
       } catch (err) { showToast(err.message, 'error'); }
     }
 

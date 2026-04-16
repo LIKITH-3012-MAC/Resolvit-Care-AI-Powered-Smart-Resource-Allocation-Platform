@@ -1,11 +1,11 @@
 /**
  * Smart Resource Allocation — API Client
- * Unified API layer: Single FastAPI backend handles both auth + data.
+ * Unified API layer: Single Flask backend handles both auth + data.
  * 
  * DEPLOYMENT:
- *  - Frontend: Vercel (static)
- *  - Backend API + Auth: Render (FastAPI)
- *  - Database: PostgreSQL (Aiven/Neon/Render)
+ *  - Frontend (UI): Served via Flask Templates (On Render)
+ *  - Backend (Brain): Flask API + Auth (On Render)
+ *  - Database: PostgreSQL
  */
 
 // ──── UNIFIED API CONFIG ────
@@ -50,7 +50,7 @@ class ApiClient {
           return (await fetch(url, { headers: this.headers, ...options })).json();
         }
         this.clearToken();
-        window.location.href = '/login.html';
+        window.location.href = '/login';
         throw new Error('Session expired');
       }
       
@@ -63,7 +63,7 @@ class ApiClient {
     }
   }
 
-  // ── Auth (same FastAPI backend, /auth prefix) ──
+  // ── Auth (Unified Flask backend, /auth prefix) ──
   async requestOtp(email) {
     const res = await fetch(`${AUTH_BASE_URL}/request-signup-otp`, {
       method: 'POST',
