@@ -1,0 +1,15 @@
+frontend/
+backend/
+ai/
+database/
+alembic/
+scripts/
+.venv/
+.env
+.env.example
+README.md
+Procfile
+render.yaml
+docker-compose.yml
+requirements.txt
+alembic.ini

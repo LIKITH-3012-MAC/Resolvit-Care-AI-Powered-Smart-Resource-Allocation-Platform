@@ -1,10 +1,17 @@
 {
   "outputDirectory": "frontend_old",
+  "cleanUrls": true,
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://resolvit-care-ai-powered-smart-resource.onrender.com/api/:path*" },
     { "source": "/auth/:path*", "destination": "https://resolvit-care-ai-powered-smart-resource.onrender.com/auth/:path*" }
   ],
   "headers": [
+    {
+      "source": "/(.*).html",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [
