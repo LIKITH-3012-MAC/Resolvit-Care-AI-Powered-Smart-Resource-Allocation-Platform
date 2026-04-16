@@ -17,7 +17,7 @@ const AUTH0_CONFIG = window.AUTH0_CONFIG || {
 };
 
 const _IS_PROD = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-const AUTH_BASE_URL = window.AUTH_BASE_URL || (_IS_PROD ? 'https://www.resolvit-ai.online/auth' : 'http://127.0.0.1:8000/auth');
+const AUTH_BASE_URL = window.AUTH_BASE_URL || (_IS_PROD ? 'https://resolvit-care-ai-powered-smart-resource.onrender.com/auth' : 'http://127.0.0.1:8000/auth');
 
 let auth0Client = null;
 

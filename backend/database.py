@@ -8,8 +8,7 @@ import ssl
 import asyncpg
 from backend.config import settings
 
-pool: asyncpg.Pool = None
-
+pool = None  # Global pool is disabled because Flask runs each async request in a separate event loop
 
 def get_clean_db_url() -> str:
     """Convert SQLAlchemy-style URL to asyncpg-compatible format."""
@@ -19,87 +18,68 @@ def get_clean_db_url() -> str:
     url = url.replace("postgres://", "postgresql://")
     return url
 
-
-async def init_db():
-    """Initialize database connection pool."""
-    global pool
+# We'll use a helper to get a fresh connection for every query to avoid cross-loop issues
+async def _get_conn():
     raw_url = get_clean_db_url()
-    
-    # Determine if SSL is needed
     needs_ssl = "ssl=require" in raw_url or "aivencloud" in raw_url or "neon" in raw_url or "supabase" in raw_url
-    
-    # Remove query params from URL (asyncpg handles ssl via parameter, not query)
     clean_url = raw_url.split("?")[0] if "?" in raw_url else raw_url
     
     ssl_ctx = None
     if needs_ssl:
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE  # Aiven uses self-signed certs
-    
-    try:
-        pool = await asyncpg.create_pool(
-            clean_url,
-            min_size=2,
-            max_size=10,
-            command_timeout=30,
-            ssl=ssl_ctx,
-        )
-        print(f"  ✅ Connected to DB (SSL={'yes' if needs_ssl else 'no'})")
-    except Exception as e:
-        print(f"  ⚠️ DB connection failed: {e}")
-        # Retry without SSL for local development
-        if needs_ssl:
-            print("  🔄 Retrying without SSL...")
-            pool = await asyncpg.create_pool(
-                clean_url,
-                min_size=2,
-                max_size=10,
-                command_timeout=30,
-            )
-        else:
-            raise
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        
+    return await asyncpg.connect(clean_url, ssl=ssl_ctx, command_timeout=30)
 
+
+async def init_db():
+    print("  ✅ Using per-request connection strategy (No global pool)")
 
 async def close_db():
-    """Close database connection pool."""
-    global pool
-    if pool:
-        await pool.close()
-
+    pass
 
 async def get_db():
-    """Get a database connection from pool."""
-    global pool
-    async with pool.acquire() as conn:
+    conn = await _get_conn()
+    try:
         yield conn
-
+    finally:
+        await conn.close()
 
 async def fetch_all(query: str, *args):
     """Execute query and return all rows as list of dicts."""
-    async with pool.acquire() as conn:
+    conn = await _get_conn()
+    try:
         rows = await conn.fetch(query, *args)
         return [dict(row) for row in rows]
-
+    finally:
+        await conn.close()
 
 async def fetch_one(query: str, *args):
     """Execute query and return single row as dict."""
-    async with pool.acquire() as conn:
+    conn = await _get_conn()
+    try:
         row = await conn.fetchrow(query, *args)
         return dict(row) if row else None
-
+    finally:
+        await conn.close()
 
 async def execute(query: str, *args):
     """Execute a statement (INSERT/UPDATE/DELETE)."""
-    async with pool.acquire() as conn:
+    conn = await _get_conn()
+    try:
         return await conn.execute(query, *args)
-
+    finally:
+        await conn.close()
 
 async def execute_returning(query: str, *args):
     """Execute a statement and return the result row."""
-    async with pool.acquire() as conn:
+    conn = await _get_conn()
+    try:
         row = await conn.fetchrow(query, *args)
         return dict(row) if row else None
+    finally:
+        await conn.close()
 
 
 # ──── Schema Auto-Creation ────
@@ -335,7 +315,8 @@ ON CONFLICT (email) DO NOTHING;
 
 async def ensure_schema():
     """Create all tables if they don't exist, then seed admin user."""
-    async with pool.acquire() as conn:
+    conn = await _get_conn()
+    try:
         try:
             await conn.execute(SCHEMA_SQL)
             print("  ✅ Tables created/verified")
@@ -375,3 +356,5 @@ async def ensure_schema():
                 print("  ✅ Admin user exists")
         except Exception as e:
             print(f"  ⚠️ Admin seed note: {e}")
+    finally:
+        await conn.close()

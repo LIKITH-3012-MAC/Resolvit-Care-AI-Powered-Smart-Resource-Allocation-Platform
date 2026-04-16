@@ -13,7 +13,7 @@
 // Point to the remote Render backend when deployed on Vercel
 const BACKEND_DOMAIN = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://127.0.0.1:8000'
-  : 'https://resolvit-care-ai-powered-smart-resource-allocation-naoaaoakp.vercel.app/';
+  : 'https://resolvit-care-ai-powered-smart-resource.onrender.com';
 
 const API_BASE_URL = `${BACKEND_DOMAIN}/api`;
 const AUTH_BASE_URL = `${BACKEND_DOMAIN}/auth`;
