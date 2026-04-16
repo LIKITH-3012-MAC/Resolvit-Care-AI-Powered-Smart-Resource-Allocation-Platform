@@ -10,8 +10,13 @@
 
 // ──── UNIFIED API CONFIG ────
 // Since the Flask backend now serves the UI via templates, we use relative paths.
-const API_BASE_URL = '/api';
-const AUTH_BASE_URL = '/auth';
+// Point to the remote Render backend when deployed on Vercel
+const BACKEND_DOMAIN = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://127.0.0.1:8000'
+  : 'https://resolvit-care-ai-powered-smart-resource-allocation-naoaaoakp.vercel.app/';
+
+const API_BASE_URL = `${BACKEND_DOMAIN}/api`;
+const AUTH_BASE_URL = `${BACKEND_DOMAIN}/auth`;
 
 class ApiClient {
   constructor() {
@@ -33,16 +38,16 @@ class ApiClient {
   async request(url, options = {}) {
     try {
       const res = await fetch(url, { headers: this.headers, ...options });
-      
+
       // Handle non-JSON responses
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
         if (!res.ok) throw new Error(`Request failed: ${res.status}`);
         return {};
       }
-      
+
       const data = await res.json();
-      
+
       if (res.status === 401) {
         // Try token refresh
         const refreshed = await this.refresh();
@@ -53,7 +58,7 @@ class ApiClient {
         window.location.href = '/login';
         throw new Error('Session expired');
       }
-      
+
       if (!res.ok) throw new Error(data.error || data.detail || 'Request failed');
       return data;
     } catch (err) {
@@ -123,7 +128,7 @@ class ApiClient {
   }
 
   async logout() {
-    try { await fetch(`${AUTH_BASE_URL}/logout`, { method: 'POST', headers: this.headers }); } catch {}
+    try { await fetch(`${AUTH_BASE_URL}/logout`, { method: 'POST', headers: this.headers }); } catch { }
     this.clearToken();
     // If Auth0 is available, use its logout for full session clear
     if (typeof logoutAuth0 === 'function') {
@@ -146,7 +151,7 @@ class ApiClient {
         if (r.accessToken) { this.setToken(r.accessToken); this.setUser(r.user); }
         return r;
       }
-    } catch {}
+    } catch { }
     // Fallback: userinfo endpoint
     const res = await fetch(`${AUTH_BASE_URL}/auth0-userinfo`, {
       method: 'POST',

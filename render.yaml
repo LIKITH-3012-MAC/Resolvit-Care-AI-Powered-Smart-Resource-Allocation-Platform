@@ -11,7 +11,7 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: https://resolvit-care-ai-powered-smart-reso.vercel.app,https://www.resolvit-ai.online
+        value: https://www.resolvit-ai.online,https://resolvit-care-ai-powered-smart-resource-allocation-naoaaoakp.vercel.app
       - key: APP_DEBUG
         value: "false"
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
@@ -21,4 +21,4 @@ services:
       - key: AUTH0_CLIENT_ID
         value: ygoYS6OsQUiCqkGB6Bhrr56G0JP4c5qF
       - key: AUTH0_AUDIENCE
-        value: https://resolvit-care-ai-powered-smart-reso.vercel.app
+        value: https://resolvit-care-ai-powered-smart-resource-allocation-naoaaoakp.vercel.app

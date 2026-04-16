@@ -1,9 +1,0 @@
-{
-  "name": "resolvit-care-root",
-  "version": "1.0.1",
-  "private": true,
-  "description": "Root configuration for Resolvit Care deployment",
-  "scripts": {
-    "build": "echo 'Deploying static frontend_old...'"
-  }
-}
