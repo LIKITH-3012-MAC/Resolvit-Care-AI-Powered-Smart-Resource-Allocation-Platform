@@ -1,36 +1,16 @@
 """
 Text Embedding Service
-Handles generating dense embeddings for text chunks using sentence-transformers.
+Lightweight version for Render Free Tier.
+Provides zero-vector placeholders to satisfy the interface without loading heavy models.
 """
-
-from sentence_transformers import SentenceTransformer
-
-# Initialize the embedding model (downloads on first run)
-# 'all-MiniLM-L6-v2' is fast, small and good for MVP
-MODEL_NAME = "all-MiniLM-L6-v2"
-_model = None
-
-def get_embedding_model() -> SentenceTransformer:
-    global _model
-    if _model is None:
-        # Load the model
-        _model = SentenceTransformer(MODEL_NAME)
-    return _model
 
 def generate_embeddings(texts: list[str]) -> list[list[float]]:
     """
-    Generate embeddings for a list of text strings.
-    
-    Args:
-        texts: List of text strings to embed
-        
-    Returns:
-        List of embedding vectors (list of floats)
+    Returns placeholder embeddings (zero vectors).
+    In the Lean Architecture, we rely on text matching in the Vector Store.
     """
     if not texts:
         return []
     
-    model = get_embedding_model()
-    # encode returns a numpy array, convert to list
-    embeddings = model.encode(texts)
-    return embeddings.tolist()
+    # Return 384-dimensional zero vectors (MiniLM size) to maintain contract
+    return [[0.0] * 384 for _ in texts]

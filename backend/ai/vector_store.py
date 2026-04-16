@@ -1,57 +1,43 @@
 """
-Vector Store Connection
-Wrapper around ChromaDB for local persistent vector storage and retrieval.
+Vector Store Shim — PostgreSQL Version
+Replaces ChromaDB with a lightweight PostgreSQL table to fit within Render Free Tier.
 """
 
-import os
-from pathlib import Path
-import chromadb
-from chromadb.config import Settings
-
-from backend.ai.embeddings import generate_embeddings
-
-# Persistent directory for ChromaDB within the backend package
-DB_PATH = str(Path(__file__).resolve().parent.parent.parent / "database" / "chroma_db")
-
-# Initialize persistent client
-_client = chromadb.PersistentClient(path=DB_PATH, settings=Settings(allow_reset=True))
-
-def get_collection(collection_name: str = "knowledge_base"):
-    """Get or create the main ChromaDB collection."""
-    # We define a custom embedding function to adhere to Chroma's interface
-    # but we use sentence-transformers from our embeddings.py
-    
-    class CustomEmbeddingFunction(chromadb.EmbeddingFunction):
-        def __call__(self, input: chromadb.Documents) -> chromadb.Embeddings:
-            return generate_embeddings(input)
-
-    collection = _client.get_or_create_collection(
-        name=collection_name,
-        embedding_function=CustomEmbeddingFunction()
-    )
-    return collection
+import json
+import uuid
+from backend.database import execute, fetch_all
 
 def add_documents(texts: list[str], metadatas: list[dict], ids: list[str], collection_name: str = "knowledge_base"):
     """
-    Add documents to the vector store.
+    Add documents to the PostgreSQL knowledge base.
     """
-    collection = get_collection(collection_name)
-    collection.add(
-        documents=texts,
-        metadatas=metadatas,
-        ids=ids
-    )
+    # Note: collection_name is ignored in this shim to keep it simple (single table)
+    for i in range(len(texts)):
+        doc_id = ids[i] if ids and i < len(ids) else str(uuid.uuid4())
+        meta = json.dumps(metadatas[i]) if metadatas and i < len(metadatas) else "{}"
+        
+        # Using a fire-and-forget approach for each doc in this shim
+        # In production, use a batch insert
+        import asyncio
+        asyncio.create_task(execute(
+            "INSERT INTO knowledge_base (id, content, metadata) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET content = $2, metadata = $3",
+            uuid.UUID(doc_id), texts[i], meta
+        ))
 
-def search_documents(query: str, n_results: int = 5, collection_name: str = "knowledge_base"):
+async def search_documents(query: str, n_results: int = 5, collection_name: str = "knowledge_base"):
     """
-    Search the vector store using a text query.
-    Returns the top n_results.
+    Search the PostgreSQL knowledge base using text matching (ILIKE).
     """
-    collection = get_collection(collection_name)
-    
-    results = collection.query(
-        query_texts=[query],
-        n_results=n_results
+    # Simple keyword search for Render Free Tier
+    # In a full deployment, use pgvector or FTS
+    search_query = f"%{query}%"
+    rows = await fetch_all(
+        "SELECT content, metadata FROM knowledge_base WHERE content ILIKE $1 LIMIT $2",
+        search_query, n_results
     )
     
-    return results
+    # Format to match the expected return structure of the previously used ChromaDB
+    return {
+        "documents": [[r["content"] for r in rows]],
+        "metadatas": [[r["metadata"] for r in rows]]
+    }

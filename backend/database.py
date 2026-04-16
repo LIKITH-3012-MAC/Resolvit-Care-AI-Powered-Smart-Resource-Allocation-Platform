@@ -319,6 +319,14 @@ CREATE TABLE IF NOT EXISTS notifications (
     action_url TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- AI Knowledge Base
+CREATE TABLE IF NOT EXISTS knowledge_base (
+    id UUID PRIMARY KEY,
+    content TEXT NOT NULL,
+    metadata JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 """
 
 INDEXES_SQL = """

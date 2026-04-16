@@ -13,10 +13,8 @@ gunicorn>=21.2.0
 psycopg2-binary>=2.9.9
 sqlalchemy>=2.0.25
 
-# AI Engine
+# AI Engine (Lean API-based)
 groq>=0.10.0
-chromadb>=0.5.0
-sentence-transformers>=3.0.0
 pymupdf>=1.24.0
 python-docx>=1.1.0
-pandas>=2.0.0
+# pandas removed for memory efficiency
