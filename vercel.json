@@ -1,20 +1,19 @@
 {
-  "outputDirectory": "frontend_old",
-  "cleanUrls": true,
+  "version": 2,
+  "builds": [
+    { "src": "main.py", "use": "@vercel/python" },
+    { "src": "frontend_old/**", "use": "@vercel/static" }
+  ],
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://resolvit-care-ai-powered-smart-resource.onrender.com/api/:path*" },
-    { "source": "/auth/:path*", "destination": "https://resolvit-care-ai-powered-smart-resource.onrender.com/auth/:path*" }
+    { "source": "/api/(.*)", "destination": "main.py" },
+    { "source": "/auth/(.*)", "destination": "https://resolvit-care-ai-powered-smart-resource.onrender.com/auth/$1" },
+    { "source": "/(.*)", "destination": "/frontend_old/$1" }
   ],
   "headers": [
     {
-      "source": "/(.*).html",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
-      ]
-    },
-    {
       "source": "/(.*)",
       "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" }
       ]
