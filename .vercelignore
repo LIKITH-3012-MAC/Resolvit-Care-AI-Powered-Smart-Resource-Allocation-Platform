@@ -1,4 +1,4 @@
-# frontend/
+# Vercel Ignore - Force Pure Static
 backend/
 ai/
 database/
@@ -13,3 +13,8 @@ render.yaml
 docker-compose.yml
 requirements.txt
 alembic.ini
+main.py
+api/
+package.json
+package-lock.json
+frontend/
