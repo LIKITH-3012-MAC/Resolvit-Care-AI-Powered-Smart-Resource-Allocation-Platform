@@ -7,10 +7,16 @@ from dotenv import load_dotenv
 from backend.config import settings
 from backend.database import init_db, close_db, ensure_schema
 
-# Import Blueprints (to be converted)
-# from backend.routes.auth import auth_bp
-# from backend.routes.reports import reports_bp
-# from backend.routes.ai_chat import ai_bp
+from backend.routes.auth import auth_bp
+from backend.routes.auth0 import auth0_bp
+from backend.routes.reports import reports_bp
+from backend.routes.volunteers import volunteers_bp
+from backend.routes.tasks import tasks_bp
+from backend.routes.resources import resources_bp
+from backend.routes.analytics import analytics_bp
+from backend.routes.maps import maps_bp
+from backend.routes.ai_chat import ai_chat_bp
+from backend.routes.ai_ingest import ai_ingest_bp
 
 app = Flask(__name__, 
             template_folder='templates',
@@ -19,6 +25,18 @@ app = Flask(__name__,
 
 CORS(app)
 load_dotenv()
+
+# Register Blueprints
+app.register_blueprint(auth_bp, url_prefix='/auth')
+app.register_blueprint(auth0_bp, url_prefix='/auth')
+app.register_blueprint(reports_bp, url_prefix='/api/reports')
+app.register_blueprint(volunteers_bp, url_prefix='/api/volunteers')
+app.register_blueprint(tasks_bp, url_prefix='/api/tasks')
+app.register_blueprint(resources_bp, url_prefix='/api/resources')
+app.register_blueprint(analytics_bp, url_prefix='/api/analytics')
+app.register_blueprint(maps_bp, url_prefix='/api/maps')
+app.register_blueprint(ai_chat_bp, url_prefix='/api/ai')
+app.register_blueprint(ai_ingest_bp, url_prefix='/api/ai')
 
 # Database lifecycle management
 @app.before_request

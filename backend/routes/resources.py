@@ -1,28 +1,28 @@
 """
 Resources API — Inventory management
+Flask Blueprint version.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from uuid import UUID
+from flask import Blueprint, request, jsonify, abort
 from backend.database import fetch_all, fetch_one, execute_returning, execute
-from backend.models import ResourceCreate
 
-router = APIRouter()
+resources_bp = Blueprint('resources_bp', __name__)
 
-
-@router.get("")
-async def list_resources(
-    type: str = Query(None),
-    status: str = Query(None),
-    limit: int = Query(50, ge=1, le=200),
-):
+@resources_bp.route("", methods=["GET"])
+async def list_resources():
     """List resource inventory."""
+    res_type = request.args.get("type")
+    status = request.args.get("status")
+    limit = int(request.args.get("limit", 50))
+
     conditions = []
     params = []
     idx = 1
 
-    if type:
+    if res_type:
         conditions.append(f"type = ${idx}")
-        params.append(type)
+        params.append(res_type)
         idx += 1
     if status:
         conditions.append(f"availability_status = ${idx}")
@@ -40,28 +40,40 @@ async def list_resources(
     params.append(limit)
 
     rows = await fetch_all(query, *params)
-    return {"data": rows, "total": len(rows)}
+    for row in rows:
+        for key, val in row.items():
+            if isinstance(val, UUID):
+                row[key] = str(val)
+    return jsonify({"data": rows, "total": len(rows)})
 
 
-@router.post("")
-async def create_resource(resource: ResourceCreate):
+@resources_bp.route("", methods=["POST"])
+async def create_resource():
     """Add a resource to inventory."""
+    data = request.json
+    if not data or "name" not in data or "type" not in data:
+        return jsonify({"error": "name and type required"}), 400
+        
     row = await execute_returning(
         """INSERT INTO resource_inventory
            (name, type, quantity, unit, warehouse_location,
             warehouse_latitude, warehouse_longitude)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING *""",
-        resource.name, resource.type, resource.quantity,
-        resource.unit, resource.warehouse_location,
-        resource.warehouse_latitude, resource.warehouse_longitude
+        data["name"], data["type"], data.get("quantity", 0),
+        data.get("unit", "units"), data.get("warehouse_location", ""),
+        data.get("warehouse_latitude"), data.get("warehouse_longitude")
     )
-    return {"data": row, "message": "Resource added"}
+    return jsonify({"data": row, "message": "Resource added"})
 
 
-@router.patch("/{resource_id}")
-async def update_resource(resource_id: str, quantity: int = None, status: str = None):
+@resources_bp.route("/<resource_id>", methods=["PATCH"])
+async def update_resource(resource_id):
     """Update resource quantity or status."""
+    data = request.json
+    quantity = data.get("quantity")
+    status = data.get("status")
+
     fields = []
     params = []
     idx = 1
@@ -76,25 +88,28 @@ async def update_resource(resource_id: str, quantity: int = None, status: str = 
         idx += 1
 
     if not fields:
-        raise HTTPException(status_code=400, detail="No fields to update")
+        return jsonify({"error": "No fields to update"}), 400
 
     params.append(resource_id)
     query = f"UPDATE resource_inventory SET {', '.join(fields)} WHERE id = ${idx} RETURNING *"
     row = await execute_returning(query, *params)
+    
+    if not row:
+        return jsonify({"error": "Resource not found"}), 404
 
-    return {"data": row, "message": "Resource updated"}
+    return jsonify({"data": row, "message": "Resource updated"})
 
 
-@router.get("/summary")
+@resources_bp.route("/summary", methods=["GET"])
 async def resource_summary():
     """Get resource inventory summary by type."""
     rows = await fetch_all(
         """SELECT type,
-                  COUNT(*) as item_count,
-                  SUM(quantity) as total_quantity,
-                  SUM(CASE WHEN availability_status = 'available' THEN quantity ELSE 0 END) as available_qty
-           FROM resource_inventory
-           GROUP BY type
-           ORDER BY type"""
+                   COUNT(*) as item_count,
+                   SUM(quantity) as total_quantity,
+                   SUM(CASE WHEN availability_status = 'available' THEN quantity ELSE 0 END) as available_qty
+            FROM resource_inventory
+            GROUP BY type
+            ORDER BY type"""
     )
-    return {"data": rows}
+    return jsonify({"data": rows})

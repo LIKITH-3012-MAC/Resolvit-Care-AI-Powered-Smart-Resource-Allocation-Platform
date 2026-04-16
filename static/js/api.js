@@ -8,13 +8,10 @@
  *  - Database: PostgreSQL (Aiven/Neon/Render)
  */
 
-// ──── CONFIGURABLE BASE URL ────
-// Production: Vercel rewrites /api/* and /auth/* to Render (see vercel.json)
-// Local dev: direct to localhost:8000
-const IS_PROD = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-const RENDER_URL = 'https://resolvit-care-ai-powered-smart-resource.onrender.com';
-const API_BASE_URL = window.API_BASE_URL || (IS_PROD ? '/api' : 'http://127.0.0.1:8000/api');
-const AUTH_BASE_URL = window.AUTH_BASE_URL || (IS_PROD ? '/auth' : 'http://127.0.0.1:8000/auth');
+// ──── UNIFIED API CONFIG ────
+// Since the Flask backend now serves the UI via templates, we use relative paths.
+const API_BASE_URL = '/api';
+const AUTH_BASE_URL = '/auth';
 
 class ApiClient {
   constructor() {

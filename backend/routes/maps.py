@@ -1,20 +1,21 @@
 """
 Maps API — Geospatial data for map visualization
+Flask Blueprint version.
 """
 
-from fastapi import APIRouter, Query
+from uuid import UUID
+from flask import Blueprint, request, jsonify
 from backend.database import fetch_all
 from ai.clustering import kmeans_cluster, dbscan_cluster, generate_heatmap_data
 
-router = APIRouter()
+maps_bp = Blueprint('maps_bp', __name__)
 
-
-@router.get("/reports")
-async def map_reports(
-    priority: str = Query(None),
-    category: str = Query(None),
-):
+@maps_bp.route("/reports", methods=["GET"])
+async def map_reports():
     """Get all reports with coordinates for map display."""
+    priority = request.args.get("priority")
+    category = request.args.get("category")
+
     conditions = ["cr.latitude IS NOT NULL", "cr.longitude IS NOT NULL"]
     params = []
     idx = 1
@@ -41,10 +42,16 @@ async def map_reports(
         ORDER BY cr.urgency_score DESC
     """, *params)
 
-    return {"data": rows, "total": len(rows)}
+    # Convert UUIDs
+    for row in rows:
+        for key, val in row.items():
+            if isinstance(val, UUID):
+                row[key] = str(val)
+
+    return jsonify({"data": rows, "total": len(rows)})
 
 
-@router.get("/volunteers")
+@maps_bp.route("/volunteers", methods=["GET"])
 async def map_volunteers():
     """Get volunteer locations for map display."""
     rows = await fetch_all("""
@@ -55,15 +62,19 @@ async def map_volunteers():
         JOIN users u ON v.user_id = u.id
         WHERE v.latitude IS NOT NULL AND v.longitude IS NOT NULL
     """)
-    return {"data": rows}
+    for row in rows:
+        for key, val in row.items():
+            if isinstance(val, UUID):
+                row[key] = str(val)
+    return jsonify({"data": rows})
 
 
-@router.get("/hotspots")
-async def detect_hotspots(
-    k: int = Query(4, ge=2, le=20),
-    method: str = Query("kmeans"),
-):
+@maps_bp.route("/hotspots", methods=["GET"])
+async def detect_hotspots():
     """Detect need hotspots using clustering."""
+    k = int(request.args.get("k", 4))
+    method = request.args.get("method", "kmeans")
+    
     rows = await fetch_all("""
         SELECT id, title, category, severity, urgency_score,
                priority_level, people_affected, latitude, longitude
@@ -72,19 +83,24 @@ async def detect_hotspots(
     """)
 
     if not rows:
-        return {"clusters": [], "method": method}
+        return jsonify({"clusters": [], "method": method})
 
     points = [dict(r) for r in rows]
+    # Handle UUIDs in points
+    for p in points:
+        for key, val in p.items():
+            if isinstance(val, UUID):
+                p[key] = str(val)
 
     if method == "dbscan":
         result = dbscan_cluster(points)
-        return {"clusters": result["clusters"], "method": "dbscan", "noise_count": result["noise_count"]}
+        return jsonify({"clusters": result["clusters"], "method": "dbscan", "noise_count": result["noise_count"]})
     else:
         clusters = kmeans_cluster(points, k=min(k, len(points)))
-        return {"clusters": clusters, "method": "kmeans"}
+        return jsonify({"clusters": clusters, "method": "kmeans"})
 
 
-@router.get("/heatmap")
+@maps_bp.route("/heatmap", methods=["GET"])
 async def heatmap_data():
     """Get heatmap-ready data for urgency visualization."""
     rows = await fetch_all("""
@@ -95,12 +111,16 @@ async def heatmap_data():
     """)
 
     points = [dict(r) for r in rows]
+    for p in points:
+        for key, val in p.items():
+            if isinstance(val, UUID):
+                p[key] = str(val)
+                
     heatmap = generate_heatmap_data(points)
+    return jsonify({"data": heatmap, "total": len(heatmap)})
 
-    return {"data": heatmap, "total": len(heatmap)}
 
-
-@router.get("/resources")
+@maps_bp.route("/resources", methods=["GET"])
 async def map_resources():
     """Get resource warehouse locations for map display."""
     rows = await fetch_all("""
@@ -110,4 +130,8 @@ async def map_resources():
         FROM resource_inventory
         WHERE warehouse_latitude IS NOT NULL AND warehouse_longitude IS NOT NULL
     """)
-    return {"data": rows}
+    for row in rows:
+        for key, val in row.items():
+            if isinstance(val, UUID):
+                row[key] = str(val)
+    return jsonify({"data": rows})

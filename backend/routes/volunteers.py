@@ -1,24 +1,23 @@
 """
 Volunteers API — CRUD + matching
+Flask Blueprint version.
 """
 
 from uuid import UUID
-from fastapi import APIRouter, HTTPException, Query
+from flask import Blueprint, request, jsonify, abort
 from backend.database import fetch_all, fetch_one, execute_returning, execute
-from backend.models import VolunteerCreate, VolunteerUpdate
 from ai.matcher import find_best_matches
 
-router = APIRouter()
+volunteers_bp = Blueprint('volunteers_bp', __name__)
 
-
-@router.get("")
-async def list_volunteers(
-    availability: str = Query(None),
-    skill: str = Query(None),
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-):
+@volunteers_bp.route("", methods=["GET"])
+async def list_volunteers():
     """List volunteers with filtering."""
+    availability = request.args.get("availability")
+    skill = request.args.get("skill")
+    limit = int(request.args.get("limit", 50))
+    offset = int(request.args.get("offset", 0))
+
     conditions = []
     params = []
     idx = 1
@@ -45,11 +44,18 @@ async def list_volunteers(
     params.extend([limit, offset])
 
     rows = await fetch_all(query, *params)
-    return {"data": rows, "total": len(rows)}
+    
+    # Convert UUIDs
+    for row in rows:
+        for key, val in row.items():
+            if isinstance(val, UUID):
+                row[key] = str(val)
+                
+    return jsonify({"data": rows, "total": len(rows)})
 
 
-@router.get("/{volunteer_id}")
-async def get_volunteer(volunteer_id: str):
+@volunteers_bp.route("/<volunteer_id>", methods=["GET"])
+async def get_volunteer(volunteer_id):
     """Get volunteer details."""
     row = await fetch_one(
         """SELECT v.*, u.name, u.email, u.phone
@@ -59,61 +65,45 @@ async def get_volunteer(volunteer_id: str):
         volunteer_id
     )
     if not row:
-        raise HTTPException(status_code=404, detail="Volunteer not found")
-    return row
+        return jsonify({"error": "Volunteer not found"}), 404
+        
+    for key, val in row.items():
+        if isinstance(val, UUID):
+            row[key] = str(val)
+    return jsonify(row)
 
 
-@router.post("")
-async def create_volunteer(vol: VolunteerCreate):
+@volunteers_bp.route("", methods=["POST"])
+async def create_volunteer():
     """Register a new volunteer."""
+    data = request.json
+    if not data or "user_id" not in data:
+        return jsonify({"error": "user_id required"}), 400
+        
     row = await execute_returning(
         """INSERT INTO volunteers
            (user_id, skill_tags, languages, latitude, longitude,
             travel_radius_km, transport_access, gender, preferred_causes)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING *""",
-        str(vol.user_id), vol.skill_tags, vol.languages,
-        vol.latitude, vol.longitude, vol.travel_radius_km,
-        vol.transport_access, vol.gender, vol.preferred_causes
+        str(data["user_id"]), data.get("skill_tags", []), data.get("languages", []),
+        data.get("latitude"), data.get("longitude"), data.get("travel_radius_km", 10),
+        data.get("transport_access", "none"), data.get("gender"), data.get("preferred_causes", [])
     )
-    return {"data": row, "message": "Volunteer registered"}
+    return jsonify({"data": row, "message": "Volunteer registered"})
 
 
-@router.patch("/{volunteer_id}")
-async def update_volunteer(volunteer_id: str, update: VolunteerUpdate):
-    """Update volunteer profile."""
-    fields = []
-    params = []
-    idx = 1
-
-    update_dict = update.model_dump(exclude_none=True)
-    for key, val in update_dict.items():
-        fields.append(f"{key} = ${idx}")
-        params.append(val)
-        idx += 1
-
-    if not fields:
-        raise HTTPException(status_code=400, detail="No fields to update")
-
-    params.append(volunteer_id)
-    query = f"UPDATE volunteers SET {', '.join(fields)} WHERE id = ${idx} RETURNING *"
-    row = await execute_returning(query, *params)
-
-    if not row:
-        raise HTTPException(status_code=404, detail="Volunteer not found")
-
-    return {"data": row, "message": "Volunteer updated"}
-
-
-@router.post("/match")
-async def match_volunteers(
-    task_type: str,
-    latitude: float,
-    longitude: float,
-    required_language: str = "",
-    top_n: int = 5,
-):
+@volunteers_bp.route("/match", methods=["POST"])
+async def match_volunteers():
     """Find best volunteer matches for a task using AI matching engine."""
+    data = request.json
+    if not data:
+        return jsonify({"error": "Data required"}), 400
+        
+    task_type = data.get("task_type")
+    latitude = data.get("latitude")
+    longitude = data.get("longitude")
+    
     volunteers = await fetch_all(
         """SELECT v.*, u.name
            FROM volunteers v
@@ -125,10 +115,9 @@ async def match_volunteers(
         "task_type": task_type,
         "latitude": latitude,
         "longitude": longitude,
-        "required_language": required_language,
+        "required_language": data.get("required_language", ""),
     }
 
-    # Convert DB rows to match format
     vol_dicts = []
     for v in volunteers:
         vol_dicts.append({
@@ -146,5 +135,5 @@ async def match_volunteers(
             "total_tasks_completed": v.get("total_tasks_completed", 0),
         })
 
-    matches = find_best_matches(vol_dicts, task_info, top_n=top_n)
-    return {"matches": matches, "task": task_info}
+    matches = find_best_matches(vol_dicts, task_info, top_n=data.get("top_n", 5))
+    return jsonify({"matches": matches, "task": task_info})

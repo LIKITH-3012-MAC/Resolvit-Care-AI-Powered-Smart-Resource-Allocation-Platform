@@ -1,27 +1,36 @@
 """
-AI Document Ingestion Endpoint
+AI Document Ingestion Endpoint — Flask Blueprint version.
 Handles uploading PDFs, DOCX, and CSVs into the ChromaDB vector store.
 """
 
 import uuid
-from fastapi import APIRouter, File, UploadFile, HTTPException, Depends
-
-from backend.routes.auth import get_current_user
+from flask import Blueprint, request, jsonify, g
+from backend.auth_decorator import token_required
 from backend.app.ai.document_parser import parse_pdf, parse_docx, parse_csv
 from backend.app.ai.vector_store import add_documents
 
-router = APIRouter()
+ai_ingest_bp = Blueprint('ai_ingest_bp', __name__)
 
-@router.post("/ingest")
-async def ingest_document(file: UploadFile = File(...), user=Depends(get_current_user)):
+@ai_ingest_bp.route("/ingest", methods=["POST"])
+@token_required
+async def ingest_document():
     """
     Upload a document, parse text, generate embeddings, and store in ChromaDB.
     """
-    # Restrict to admins or specific roles if needed
+    user = g.current_user
+    
+    # Restrict to admins or specific roles
     if user.get("role") not in ["admin", "coordinator"]:
-        raise HTTPException(status_code=403, detail="Only admins or coordinators can ingest knowledge.")
+        return jsonify({"error": "Only admins or coordinators can ingest knowledge."}), 403
         
-    file_bytes = await file.read()
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+        
+    file_bytes = file.read()
     filename = file.filename.lower()
     
     text_chunks = []
@@ -34,10 +43,10 @@ async def ingest_document(file: UploadFile = File(...), user=Depends(get_current
     elif filename.endswith(".csv"):
         text_chunks = parse_csv(file_bytes, file.filename)
     else:
-        raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, or CSV.")
+        return jsonify({"error": "Unsupported file format. Please upload PDF, DOCX, or CSV."}), 400
 
     if not text_chunks:
-        raise HTTPException(status_code=400, detail="No readable text found in document.")
+        return jsonify({"error": "No readable text found in document."}), 400
         
     # Generate random UUIDs for chunks
     doc_ids = [str(uuid.uuid4()) for _ in text_chunks]
@@ -60,9 +69,9 @@ async def ingest_document(file: UploadFile = File(...), user=Depends(get_current
             collection_name="knowledge_base"
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to index document: {str(e)}")
+        return jsonify({"error": f"Failed to index document: {str(e)}"}), 500
 
-    return {
+    return jsonify({
         "message": f"Successfully ingested {file.filename}",
         "chunks_indexed": len(text_chunks)
-    }
+    })
