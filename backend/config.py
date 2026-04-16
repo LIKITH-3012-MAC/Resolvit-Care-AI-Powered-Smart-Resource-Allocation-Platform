@@ -25,6 +25,10 @@ class Settings:
     AUTH0_DOMAIN: str = os.getenv("AUTH0_DOMAIN", "")
     AUTH0_AUDIENCE: str = os.getenv("AUTH0_AUDIENCE", "")
     AUTH0_CLIENT_ID: str = os.getenv("AUTH0_CLIENT_ID", "")
+    AUTH0_CLIENT_SECRET: str = os.getenv("AUTH0_CLIENT_SECRET", "")
+
+    # AI Engine
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 
 
 settings = Settings()

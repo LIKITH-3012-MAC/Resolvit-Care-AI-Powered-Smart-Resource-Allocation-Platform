@@ -9,14 +9,15 @@
 // ──── Auth0 Configuration ────
 // These can be overridden via window.AUTH0_CONFIG before this script loads
 const AUTH0_CONFIG = window.AUTH0_CONFIG || {
-  domain:   'YOUR_AUTH0_DOMAIN.us.auth0.com',    // Replace with your Auth0 domain
-  clientId: 'YOUR_AUTH0_CLIENT_ID',               // Replace with your Auth0 SPA Client ID
-  audience: 'https://smartresource-api',           // Must match Auth0 API Identifier
+  domain:   'resolvitai.us.auth0.com',
+  clientId: 'ygoYS6OsQUiCqkGB6Bhrr56G0JP4c5qF',
+  audience: 'https://resolvit-care-ai-powered-smart-reso.vercel.app',
   redirectUri: window.location.origin + '/callback.html',
   logoutUri:   window.location.origin + '/login.html',
 };
 
-const AUTH_BASE_URL = window.AUTH_BASE_URL || 'http://127.0.0.1:8000/auth';
+const _IS_PROD = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+const AUTH_BASE_URL = window.AUTH_BASE_URL || (_IS_PROD ? '/auth' : 'http://127.0.0.1:8000/auth');
 
 let auth0Client = null;
 

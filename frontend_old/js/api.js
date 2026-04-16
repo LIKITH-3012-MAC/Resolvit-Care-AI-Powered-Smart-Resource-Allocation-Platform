@@ -9,10 +9,12 @@
  */
 
 // ──── CONFIGURABLE BASE URL ────
-// For local dev: http://127.0.0.1:8000
-// For production: https://your-render-app.onrender.com
-const API_BASE_URL = window.API_BASE_URL || 'http://127.0.0.1:8000/api';
-const AUTH_BASE_URL = window.AUTH_BASE_URL || 'http://127.0.0.1:8000/auth';
+// Production: Vercel rewrites /api/* and /auth/* to Render (see vercel.json)
+// Local dev: direct to localhost:8000
+const IS_PROD = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+const RENDER_URL = 'https://resolvit-care-ai-powered-smart-resource.onrender.com';
+const API_BASE_URL = window.API_BASE_URL || (IS_PROD ? '/api' : 'http://127.0.0.1:8000/api');
+const AUTH_BASE_URL = window.AUTH_BASE_URL || (IS_PROD ? '/auth' : 'http://127.0.0.1:8000/auth');
 
 class ApiClient {
   constructor() {
@@ -126,7 +128,38 @@ class ApiClient {
   async logout() {
     try { await fetch(`${AUTH_BASE_URL}/logout`, { method: 'POST', headers: this.headers }); } catch {}
     this.clearToken();
+    // If Auth0 is available, use its logout for full session clear
+    if (typeof logoutAuth0 === 'function') {
+      logoutAuth0();
+      return;
+    }
     window.location.href = '/login.html';
+  }
+
+  async loginWithAuth0Token(auth0Token, userInfo = null) {
+    // Try JWT callback first
+    try {
+      const res = await fetch(`${AUTH_BASE_URL}/auth0-callback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: auth0Token })
+      });
+      if (res.ok) {
+        const r = await res.json();
+        if (r.accessToken) { this.setToken(r.accessToken); this.setUser(r.user); }
+        return r;
+      }
+    } catch {}
+    // Fallback: userinfo endpoint
+    const res = await fetch(`${AUTH_BASE_URL}/auth0-userinfo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: auth0Token, user_info: userInfo })
+    });
+    const r = await res.json();
+    if (!res.ok) throw new Error(r.detail || 'Auth0 login failed');
+    if (r.accessToken) { this.setToken(r.accessToken); this.setUser(r.user); }
+    return r;
   }
 
   async forgotPassword(email) {

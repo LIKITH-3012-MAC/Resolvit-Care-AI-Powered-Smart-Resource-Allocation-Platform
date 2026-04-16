@@ -1,18 +1,24 @@
 services:
   - type: web
-    name: smart-resource-api
+    name: resolvit-api
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn backend.app:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 120
+    startCommand: gunicorn backend.main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT --timeout 120
     envVars:
       - key: DATABASE_URL
         sync: false
       - key: SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: https://hackathon-vit-ap.vercel.app,http://localhost:3000
+        value: https://resolvit-care-ai-powered-smart-reso.vercel.app,https://www.resolvit-ai.online
       - key: APP_DEBUG
         value: "false"
       - key: ACCESS_TOKEN_EXPIRE_MINUTES
         value: "1440"
+      - key: AUTH0_DOMAIN
+        value: resolvitai.us.auth0.com
+      - key: AUTH0_CLIENT_ID
+        value: ygoYS6OsQUiCqkGB6Bhrr56G0JP4c5qF
+      - key: AUTH0_AUDIENCE
+        value: https://resolvit-care-ai-powered-smart-reso.vercel.app

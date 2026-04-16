@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from backend.config import settings
 from backend.database import init_db, close_db, ensure_schema
-from backend.routes import auth, auth0, reports, volunteers, tasks, resources, analytics, maps
+from backend.routes import auth, auth0, reports, volunteers, tasks, resources, analytics, maps, ai_chat, ai_ingest
 
 
 @asynccontextmanager
@@ -56,6 +56,8 @@ app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
 app.include_router(resources.router, prefix="/api/resources", tags=["Resources"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(maps.router, prefix="/api/maps", tags=["Maps"])
+app.include_router(ai_chat.router, prefix="/api/ai", tags=["AI Engine"])
+app.include_router(ai_ingest.router, prefix="/api/ai", tags=["AI Ingestion"])
 
 
 @app.get("/api/health")
